@@ -1,15 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #fff;
   --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --kelasin-purple: #644da0;
+  --kelasin-yellow: #f9cd15;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,4 +18,34 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Utility classes for color palette */
+.text-kelasin-purple {
+  color: var(--kelasin-purple);
+}
+.text-kelasin-yellow {
+  color: var(--kelasin-yellow);
+}
+.bg-kelasin-purple {
+  background-color: var(--kelasin-purple);
+}
+.bg-kelasin-yellow {
+  background-color: var(--kelasin-yellow);
+}
+
+/* Button style for home hero */
+.btn-kelasin {
+  background: var(--kelasin-yellow);
+  color: #000;
+  font-weight: bold;
+  border-radius: 1.5rem;
+  padding: 0.75rem 2rem;
+  font-size: 1.15rem;
+  transition: box-shadow 0.2s, background 0.2s;
+  box-shadow: 0 2px 8px 0 rgba(249, 205, 21, 0.08);
+}
+.btn-kelasin:hover {
+  background: #ffe066;
+  color: #000;
 }
