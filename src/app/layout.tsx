@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kelasinaja",
-  description: "Token-Based Learning Platform and Gamification as a Digital Solution for Quality Education",
+  title: "KelasinAja",
+  description:
+    "Token-Based Learning Platform and Gamification as a Digital Solution for Quality Education",
 };
 
 export default function RootLayout({
