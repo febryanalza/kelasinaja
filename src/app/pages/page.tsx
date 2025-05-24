@@ -97,8 +97,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-white">
-      <Header />
-      {/* Hero Section - sesuai dengan gambar */}
+      <Header /> {/* Hero Section - sesuai dengan gambar */}
       <section className="relative py-12 lg:py-20 overflow-hidden">
         <div className="container mx-auto px-4 lg:px-8">
           <div className="flex flex-col lg:flex-row lg:items-center">
@@ -106,7 +105,7 @@ export default function LandingPage() {
             <div className="lg:w-1/2 mb-12 lg:mb-0 z-10">
               <h1 className="text-4xl lg:text-6xl font-bold text-kelasin-purple mb-6 animate-fade-in">
                 Selamat Datang di{" "}
-                <span className="text-kelasin-yellow font-kufam">
+                <span className="text-kelasin-yellow font-kufam inline-block animate-float">
                   KelasinAja
                 </span>
               </h1>
@@ -114,22 +113,22 @@ export default function LandingPage() {
                 Platform belajar online terbaik untuk siswa SMA. Pelajari materi
                 dari guru guru terbaik dengan cara yang menyenangkan!
               </p>
-              <button className="bg-kelasin-yellow text-black px-8 py-3 rounded-full font-bold text-lg hover:bg-opacity-90 transition-all duration-300 hover:shadow-lg transform hover:-translate-y-1 animate-fade-in-delayed-more">
+              <button className="bg-kelasin-yellow text-black px-8 py-4 rounded-full font-bold text-lg hover:bg-opacity-90 transition-all duration-300 hover:shadow-lg transform hover:-translate-y-1 animate-fade-in-delayed-more hover:scale-105 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow focus:ring-opacity-50">
                 Mulai Belajar!
               </button>
             </div>
-            {/* Area dengan decorative shapes */}
-            <div className="lg:w-1/2 relative h-64 lg:h-auto">
-              <div className="absolute right-0 top-0 w-64 h-64 rounded-full bg-kelasin-yellow opacity-20 pulse-slow"></div>
-              <div className="absolute right-32 top-20 w-56 h-56 rounded-full bg-kelasin-purple opacity-20 pulse-slower"></div>
-              <div className="absolute right-10 top-40 w-48 h-48 rounded-full bg-kelasin-yellow opacity-20 pulse-slowest"></div>
-              <div className="absolute right-24 top-16 w-40 h-40 flex items-center justify-center animate-float">
+            {/* Area dengan decorative logo graphic */}
+            <div className="lg:w-1/2 relative h-80 lg:h-auto flex items-center justify-center">
+              <div className="relative w-full h-full flex justify-center items-center">
+                <div className="absolute w-80 h-80 rounded-full bg-kelasin-purple opacity-5 animate-pulse-slower"></div>
+                <div className="absolute w-64 h-64 rounded-full bg-kelasin-yellow opacity-5 animate-pulse-slowest"></div>
                 <Image
-                  src="/images/web_photo.webp"
-                  alt="Student Learning"
-                  width={300}
-                  height={300}
-                  className="rounded-lg shadow-xl"
+                  src="/images/kelasin_graphic.png"
+                  alt="KelasinAja Graphic"
+                  width={600}
+                  height={600}
+                  className="object-contain animate-float z-10 max-w-full h-auto"
+                  priority
                 />
               </div>
             </div>
