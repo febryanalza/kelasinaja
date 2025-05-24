@@ -179,7 +179,7 @@ const Header: React.FC = () => {
             alt="Logo"
             width={40}
             height={40}
-            className="rounded-full cursor-pointer"
+            className="rounded cursor-pointer hover:scale-105 transition-transform duration-200 shadow-lg object-cover"
           />
           <button
             className="text-white/80 bg-white/7 rounded-xl cursor-pointer p-2 hover:bg-white/20"
