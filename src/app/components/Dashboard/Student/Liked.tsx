@@ -60,7 +60,7 @@ export default function Liked() {
                 } else {
                     setLikedVideos([]);
                 }
-            } catch (error: any) {
+            } catch (error: ) {
                 console.error('Error fetching liked videos:', error);
                 setError(error.message || 'Terjadi kesalahan saat mengambil data video');
             } finally {
