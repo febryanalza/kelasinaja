@@ -119,7 +119,7 @@ export default function RenderVideo({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {currentVideos.map((video) => (
             <Link
-              href={`/pages/kelas/${video.id}`}
+              href={`/kelas/${video.id}`}
               key={video.id}
               className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-gray-200 transform hover:-translate-y-1"
             >

@@ -203,7 +203,7 @@ const Header: React.FC = () => {
                 {subjects.map((subject) => (
                   <a
                     key={subject.id}
-                    href=""
+                    href="#"
                     className="text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm"
                   >
                     {subject.title}
