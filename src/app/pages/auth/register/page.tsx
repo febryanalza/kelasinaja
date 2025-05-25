@@ -41,21 +41,21 @@ export default function RegisterModal({
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
+
       // Validasi ukuran file (maksimal 2MB)
       if (file.size > 2 * 1024 * 1024) {
         setError("Ukuran file terlalu besar. Maksimal 2MB.");
         return;
       }
-      
+
       // Validasi tipe file
       if (!file.type.startsWith("image/")) {
         setError("File harus berupa gambar.");
         return;
       }
-      
+
       setAvatarFile(file);
-      
+
       // Buat preview gambar
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -67,66 +67,73 @@ export default function RegisterModal({
 
   const uploadAvatar = async (userId: string): Promise<string | null> => {
     if (!avatarFile) return null;
-    
+
     try {
       // Bersihkan nama file dari karakter khusus
-      const fileExt = avatarFile.name.split('.').pop();
-      const sanitizedExt = fileExt?.replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+      const fileExt = avatarFile.name.split(".").pop();
+      const sanitizedExt = fileExt?.replace(/[^a-zA-Z0-9]/g, "") || "jpg";
       const fileName = `${userId}/${Date.now()}.${sanitizedExt}`;
-      
+
       // Periksa apakah bucket 'avatars' ada
-      const { data: buckets, error: bucketsError } = await supabase
-        .storage
-        .listBuckets();
-        
+      const { data: buckets, error: bucketsError } =
+        await supabase.storage.listBuckets();
+
       if (bucketsError) {
         console.error("Error checking buckets:", bucketsError);
         throw bucketsError;
       }
-      
+
       // Jika bucket 'avatars' tidak ada, buat bucket baru
-      const avatarBucketExists = buckets.some(bucket => bucket.name === 'avatars');
+      const avatarBucketExists = buckets.some(
+        (bucket) => bucket.name === "avatars"
+      );
       if (!avatarBucketExists) {
-        const { error: createBucketError } = await supabase
-          .storage
-          .createBucket('avatars', {
+        const { error: createBucketError } =
+          await supabase.storage.createBucket("avatars", {
             public: true,
             fileSizeLimit: 2097152, // 2MB dalam bytes
-            allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+            allowedMimeTypes: [
+              "image/jpeg",
+              "image/png",
+              "image/gif",
+              "image/webp",
+            ],
           });
-          
+
         if (createBucketError) {
           console.error("Error creating avatars bucket:", createBucketError);
           throw createBucketError;
         }
       }
-      
+
       // Upload file ke bucket 'avatars'
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from("avatars")
         .upload(fileName, avatarFile, {
-          cacheControl: '3600',
-          upsert: true // Ubah ke true untuk menimpa file jika sudah ada
+          cacheControl: "3600",
+          upsert: true, // Ubah ke true untuk menimpa file jika sudah ada
         });
-        
+
       if (uploadError) {
         console.error("Error uploading avatar:", uploadError);
         throw uploadError;
       }
-      
+
       // Dapatkan URL publik
-      const { data } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-        
+      const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+
       if (!data || !data.publicUrl) {
         throw new Error("Failed to get public URL for uploaded avatar");
       }
-      
+
       return data.publicUrl;
     } catch (error) {
       console.error("Error uploading avatar:", error);
-      setError(error instanceof Error ? error.message : "Gagal mengupload avatar. Silakan coba lagi.");
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengupload avatar. Silakan coba lagi."
+      );
       return null;
     }
   };
@@ -135,12 +142,12 @@ export default function RegisterModal({
     e.preventDefault();
     setLoading(true);
     setError("");
-  
+
     try {
       if (!supabase) {
         throw new Error("Supabase client not initialized");
       }
-  
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: (e.target as HTMLFormElement).password.value,
@@ -148,28 +155,28 @@ export default function RegisterModal({
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
-  
+
       if (signUpError) {
         console.error("Signup error:", signUpError);
         setError(signUpError.message);
         return;
       }
-  
+
       if (!data.user) {
         throw new Error("No user data returned after signup");
       }
-      
+
       // Upload avatar jika ada
       let avatarUrl = null;
       if (avatarFile) {
         avatarUrl = await uploadAvatar(data.user.id);
-        
+
         // Jika gagal upload avatar, tampilkan pesan tapi lanjutkan pendaftaran
         if (!avatarUrl) {
           console.warn("Avatar upload failed, continuing with registration");
         }
       }
-  
+
       const { error: profileError } = await supabase.from("users").insert([
         {
           id: data.user.id,
@@ -180,13 +187,13 @@ export default function RegisterModal({
           role: "student",
         },
       ]);
-  
+
       if (profileError) {
         console.error("Profile creation error:", profileError);
         setError(profileError.message);
         return;
       }
-  
+
       // Tutup modal setelah berhasil mendaftar
       onClose();
       // Refresh halaman untuk memperbarui status login
@@ -227,43 +234,56 @@ export default function RegisterModal({
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
-        </button>
-
+        </button>{" "}
         {/* Heading dengan tombol switch */}
-        <div className="flex justify-center mb-8 border-b border-white/20 pb-4">
-          <button
-            onClick={switchToLogin}
-            className="text-3xl font-bold text-white/60 mx-2 px-4 py-2 hover:text-white transition-colors"
-          >
-            Login
-          </button>
-          <button className="text-3xl font-bold text-white mx-2 px-4 py-2 border-b-2 border-[var(--peachy-pink)]">
-            Daftar
-          </button>
+        <div className="flex flex-col items-center mb-8 border-b border-white/20 pb-4">
+          <h2 className="text-2xl font-bold text-kelasin-purple font-kufam mb-4">
+            KelasinAja
+          </h2>
+          <div className="flex">
+            <button
+              onClick={switchToLogin}
+              className="text-xl font-bold text-white/60 mx-2 px-4 py-2 hover:text-white transition-colors"
+            >
+              Login
+            </button>
+            <button className="text-xl font-bold text-white mx-2 px-4 py-2 border-b-2 border-kelasin-yellow">
+              Daftar
+            </button>
+          </div>
         </div>
-
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-500 rounded-lg p-4 mb-6">
             {error}
           </div>
         )}
-
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Avatar upload section */}
           <div className="flex flex-col items-center mb-6">
-            <div 
+            <div
               className="w-24 h-24 rounded-full bg-white/10 border-2 border-white/20 overflow-hidden mb-2 flex items-center justify-center cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
               {avatarPreview ? (
-                <Image 
-                  src={avatarPreview} 
-                  alt="Avatar preview" 
+                <Image
+                  src={avatarPreview}
+                  alt="Avatar preview"
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-12 w-12 text-white/50"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
                 </svg>
               )}
             </div>
@@ -300,7 +320,7 @@ export default function RegisterModal({
               required
               value={formData.email}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--peachy-pink)]"
+              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
             />
           </div>
 
@@ -316,7 +336,7 @@ export default function RegisterModal({
               name="password"
               id="password"
               required
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--peachy-pink)]"
+              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
             />
           </div>
 
@@ -334,7 +354,7 @@ export default function RegisterModal({
               required
               value={formData.full_name}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--peachy-pink)]"
+              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
             />
           </div>
 
@@ -354,7 +374,7 @@ export default function RegisterModal({
               required
               value={formData.grade}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--peachy-pink)]"
+              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
             />
           </div>
 
@@ -371,7 +391,7 @@ export default function RegisterModal({
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[var(--peachy-pink)] text-white rounded-lg px-4 py-2 font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="w-full bg-kelasin-purple text-white rounded-lg px-4 py-2 font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {loading ? "Mendaftar..." : "Daftar"}
             </button>
