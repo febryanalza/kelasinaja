@@ -197,3 +197,24 @@ body {
 .stagger-item:nth-child(6) {
   animation-delay: 0.6s;
 }
+
+body *, 
+body *::before, 
+body *::after {
+  font-family: var(--font-kufam), Arial, Helvetica, sans-serif !important;
+}
+
+/* Override pseudo-elements */
+::before, ::after {
+  font-family: var(--font-kufam), Arial, Helvetica, sans-serif !important;
+}
+
+/* Override placeholder text */
+::placeholder {
+  font-family: var(--font-kufam), Arial, Helvetica, sans-serif !important;
+}
+
+/* Universal override for absolute coverage */
+* {
+  font-family: var(--font-kufam), Arial, Helvetica, sans-serif !important;
+}
