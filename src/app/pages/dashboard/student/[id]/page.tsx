@@ -26,6 +26,7 @@ export default function StudentDashboard() {
   ];
 
   useEffect(() => {
+    setLoading(false);
     const fetchUserProfile = async () => {
       const {
         data: { session },
@@ -42,7 +43,7 @@ export default function StudentDashboard() {
           setUserProfile(profile);
         }
       }
-      setLoading(false);
+      
     };
 
     fetchUserProfile();

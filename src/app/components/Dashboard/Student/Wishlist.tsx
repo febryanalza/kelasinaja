@@ -27,7 +27,7 @@ export default function Wishlist() {
                 
                 // Ambil data video yang ada di wishlist pengguna
                 const { data: wishlistData, error: wishlistError } = await supabase
-                    .from('wishlist')
+                    .from('wishlists')
                     .select('video_id')
                     .eq('user_id', user.id);
                 

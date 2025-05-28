@@ -3,7 +3,6 @@
 import { useState, useRef } from "react";
 import supabase from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
 interface RegisterModalProps {
   isOpen: boolean;
@@ -19,16 +18,13 @@ export default function RegisterModal({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     email: "",
     full_name: "",
     grade: "",
-    avatar_url: "",
+    avatar_url: "https://vovgbtfzhhahzxrbrtzy.supabase.co/storage/v1/object/public/avatars//10015419.png",
   });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -38,105 +34,6 @@ export default function RegisterModal({
     }));
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-
-      // Validasi ukuran file (maksimal 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        setError("Ukuran file terlalu besar. Maksimal 2MB.");
-        return;
-      }
-
-      // Validasi tipe file
-      if (!file.type.startsWith("image/")) {
-        setError("File harus berupa gambar.");
-        return;
-      }
-
-      setAvatarFile(file);
-
-      // Buat preview gambar
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setAvatarPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const uploadAvatar = async (userId: string): Promise<string | null> => {
-    if (!avatarFile) return null;
-
-    try {
-      // Bersihkan nama file dari karakter khusus
-      const fileExt = avatarFile.name.split(".").pop();
-      const sanitizedExt = fileExt?.replace(/[^a-zA-Z0-9]/g, "") || "jpg";
-      const fileName = `${userId}/${Date.now()}.${sanitizedExt}`;
-
-      // Periksa apakah bucket 'avatars' ada
-      const { data: buckets, error: bucketsError } =
-        await supabase.storage.listBuckets();
-
-      if (bucketsError) {
-        console.error("Error checking buckets:", bucketsError);
-        throw bucketsError;
-      }
-
-      // Jika bucket 'avatars' tidak ada, buat bucket baru
-      const avatarBucketExists = buckets.some(
-        (bucket) => bucket.name === "avatars"
-      );
-      if (!avatarBucketExists) {
-        const { error: createBucketError } =
-          await supabase.storage.createBucket("avatars", {
-            public: true,
-            fileSizeLimit: 2097152, // 2MB dalam bytes
-            allowedMimeTypes: [
-              "image/jpeg",
-              "image/png",
-              "image/gif",
-              "image/webp",
-            ],
-          });
-
-        if (createBucketError) {
-          console.error("Error creating avatars bucket:", createBucketError);
-          throw createBucketError;
-        }
-      }
-
-      // Upload file ke bucket 'avatars'
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(fileName, avatarFile, {
-          cacheControl: "3600",
-          upsert: true, // Ubah ke true untuk menimpa file jika sudah ada
-        });
-
-      if (uploadError) {
-        console.error("Error uploading avatar:", uploadError);
-        throw uploadError;
-      }
-
-      // Dapatkan URL publik
-      const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
-
-      if (!data || !data.publicUrl) {
-        throw new Error("Failed to get public URL for uploaded avatar");
-      }
-
-      return data.publicUrl;
-    } catch (error) {
-      console.error("Error uploading avatar:", error);
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Gagal mengupload avatar. Silakan coba lagi."
-      );
-      return null;
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -164,29 +61,25 @@ export default function RegisterModal({
 
       if (!data.user) {
         throw new Error("No user data returned after signup");
+        
       }
 
       // Upload avatar jika ada
-      let avatarUrl = null;
-      if (avatarFile) {
-        avatarUrl = await uploadAvatar(data.user.id);
+      
 
-        // Jika gagal upload avatar, tampilkan pesan tapi lanjutkan pendaftaran
-        if (!avatarUrl) {
-          console.warn("Avatar upload failed, continuing with registration");
-        }
-      }
-
-      const { error: profileError } = await supabase.from("users").insert([
+      const { error: profileError } = await supabase
+      .from('users')
+      .insert([
         {
           id: data.user.id,
-          email: formData.email,
+          email: data.user.email,
           full_name: formData.full_name,
           grade: parseInt(formData.grade),
-          avatar_url: avatarUrl || null,
+          avatar_url: formData.avatar_url,
           role: "student",
         },
-      ]);
+      ])
+      .select();
 
       if (profileError) {
         console.error("Profile creation error:", profileError);
@@ -259,52 +152,7 @@ export default function RegisterModal({
         )}
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Avatar upload section */}
-          <div className="flex flex-col items-center mb-6">
-            <div
-              className="w-24 h-24 rounded-full bg-white/10 border-2 border-white/20 overflow-hidden mb-2 flex items-center justify-center cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {avatarPreview ? (
-                <Image
-                  src={avatarPreview}
-                  alt="Avatar preview"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-12 w-12 text-white/50"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
-              )}
-            </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleAvatarChange}
-              accept="image/*"
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-sm text-white/80 hover:text-white"
-            >
-              Upload Foto Profil
-            </button>
-            <p className="text-xs text-white/50 mt-1">
-              Maks. 2MB (JPG, PNG, GIF)
-            </p>
-          </div>
+          
 
           <div>
             <label

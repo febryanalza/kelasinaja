@@ -263,7 +263,7 @@ const Header: React.FC = () => {
               About
             </Link>
             <Link
-              href={`/pages/dashboard/admin`}
+              href={`/pages/dashboard/student/${1}`}
               className="bg-kelasin-purple text-white px-3 py-2 text-sm rounded-md hover:bg-opacity-90 transition-colors"
             >
               Dashboard

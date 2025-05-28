@@ -279,23 +279,23 @@ export default function LeaderboardPage() {
       <main className="min-h-screen bg-gradient-to-b from-[#000033] to-[#000066]">
         <Header />
         <div className="flex justify-center items-center h-[80vh]">
-          <p className="text-white text-xl">Memuat...</p>
+          <p className="text-gray-700 text-xl">Memuat...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#000033] to-[#000066]">
+    <main className="min-h-screen bg-white">
       <Header />
 
       {/* Leaderboard Header */}
       <section className="pt-8 pb-4 px-6 md:px-12 lg:px-24">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold text-kelasin-purple mb-2">
             Leaderboard
           </h1>
-          <p className="text-white/60">
+          <p className="text-gray-700">
             Lihat peringkat siswa, guru, video, dan topik terpopuler di platform kami
           </p>
         </div>
@@ -307,25 +307,25 @@ export default function LeaderboardPage() {
           <div className="flex overflow-x-auto gap-2 border-b border-white/10 pb-2">
             <button
               onClick={() => setActiveTab("students")}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "students" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "students" ? "bg-white/10 text-gray-700" : "text-gray-700 hover:text-gray-700 hover:bg-white/5"}`}
             >
               Siswa Teraktif
             </button>
             <button
               onClick={() => setActiveTab("teachers")}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "teachers" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "teachers" ? "bg-white/10 text-gray-700" : "text-gray-700 hover:text-gray-700 hover:bg-white/5"}`}
             >
               Guru Teraktif
             </button>
             <button
               onClick={() => setActiveTab("videos")}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "videos" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "videos" ? "bg-white/10 text-gray-700" : "text-gray-700 hover:text-gray-700 hover:bg-white/5"}`}
             >
               Video Terpopuler
             </button>
             <button
               onClick={() => setActiveTab("topics")}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "topics" ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === "topics" ? "bg-white/10 text-gray-700" : "text-gray-700 hover:text-gray-700 hover:bg-white/5"}`}
             >
               Topik Terpopuler
             </button>
@@ -339,10 +339,10 @@ export default function LeaderboardPage() {
           {/* Siswa Teraktif */}
           {activeTab === "students" && (
             <div>
-              <h2 className="text-xl font-bold text-white mb-6">Siswa Teraktif (Berdasarkan Jumlah Video Ditonton)</h2>
+              <h2 className="text-xl font-bold text-gray-700 mb-6">Siswa Teraktif (Berdasarkan Jumlah Video Ditonton)</h2>
               
               <div className="bg-white/5 rounded-xl overflow-hidden">
-                <div className="grid grid-cols-12 bg-white/10 p-4 text-white/80 font-medium">
+                <div className="grid grid-cols-12 bg-white/10 p-4 text-gray-700/80 font-medium">
                   <div className="col-span-1 text-center">Rank</div>
                   <div className="col-span-5 md:col-span-4">Siswa</div>
                   <div className="col-span-3 text-center hidden md:block">Kelas</div>
@@ -351,7 +351,7 @@ export default function LeaderboardPage() {
                 </div>
                 
                 {students.map((student) => (
-                  <div key={student.id} className="grid grid-cols-12 p-4 border-b border-white/5 text-white hover:bg-white/5 transition-colors">
+                  <div key={student.id} className="grid grid-cols-12 p-4 border-b border-white/5 text-gray-700 hover:bg-white/5 transition-colors">
                     <div className="col-span-1 text-center flex justify-center items-center">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center ${student.rank <= 3 ? "bg-[var(--peachy-pink)]" : "bg-white/10"}`}>
                         {student.rank}
@@ -368,7 +368,7 @@ export default function LeaderboardPage() {
                       </div>
                       <span>{student.name}</span>
                     </div>
-                    <div className="col-span-3 text-center hidden md:flex items-center justify-center text-white/60">
+                    <div className="col-span-3 text-center hidden md:flex items-center justify-center text-gray-700">
                       {student.grade}
                     </div>
                     <div className="col-span-3 text-center flex items-center justify-center">
@@ -386,10 +386,10 @@ export default function LeaderboardPage() {
           {/* Guru Teraktif */}
           {activeTab === "teachers" && (
             <div>
-              <h2 className="text-xl font-bold text-white mb-6">Guru Teraktif (Berdasarkan Jumlah Video Diproduksi)</h2>
+              <h2 className="text-xl font-bold text-gray-700 mb-6">Guru Teraktif (Berdasarkan Jumlah Video Diproduksi)</h2>
               
               <div className="bg-white/5 rounded-xl overflow-hidden">
-                <div className="grid grid-cols-12 bg-white/10 p-4 text-white/80 font-medium">
+                <div className="grid grid-cols-12 bg-white/10 p-4 text-gray-700/80 font-medium">
                   <div className="col-span-1 text-center">Rank</div>
                   <div className="col-span-5 md:col-span-4">Guru</div>
                   <div className="col-span-3 text-center hidden md:block">Mata Pelajaran</div>
@@ -398,7 +398,7 @@ export default function LeaderboardPage() {
                 </div>
                 
                 {teachers.map((teacher) => (
-                  <div key={teacher.id} className="grid grid-cols-12 p-4 border-b border-white/5 text-white hover:bg-white/5 transition-colors">
+                  <div key={teacher.id} className="grid grid-cols-12 p-4 border-b border-white/5 text-gray-700 hover:bg-white/5 transition-colors">
                     <div className="col-span-1 text-center flex justify-center items-center">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center ${teacher.rank <= 3 ? "bg-[var(--peachy-pink)]" : "bg-white/10"}`}>
                         {teacher.rank}
@@ -415,7 +415,7 @@ export default function LeaderboardPage() {
                       </div>
                       <span>{teacher.name}</span>
                     </div>
-                    <div className="col-span-3 text-center hidden md:flex items-center justify-center text-white/60">
+                    <div className="col-span-3 text-center hidden md:flex items-center justify-center text-gray-700">
                       {teacher.subject}
                     </div>
                     <div className="col-span-3 text-center flex items-center justify-center">
@@ -433,7 +433,7 @@ export default function LeaderboardPage() {
           {/* Video Terpopuler */}
           {activeTab === "videos" && (
             <div>
-              <h2 className="text-xl font-bold text-white mb-6">Video Terpopuler</h2>
+              <h2 className="text-xl font-bold text-gray-700 mb-6">Video Terpopuler</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {popularVideos.map((video) => (
@@ -449,20 +449,20 @@ export default function LeaderboardPage() {
                         fill
                         className="object-cover"
                       />
-                      <div className="absolute top-2 right-2 bg-white/20 backdrop-blur-sm text-white px-2 py-1 rounded text-sm">
+                      <div className="absolute top-2 right-2 bg-white/20 backdrop-blur-sm text-gray-700 px-2 py-1 rounded text-sm">
                         {video.views} views
                       </div>
                     </div>
                     <div className="p-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="bg-white/20 text-white/90 text-xs px-2 py-1 rounded">
+                        <span className="bg-white/20 text-gray-700/90 text-xs px-2 py-1 rounded">
                           {video.subject}
                         </span>
-                        <span className="bg-white/20 text-white/90 text-xs px-2 py-1 rounded">
+                        <span className="bg-white/20 text-gray-700/90 text-xs px-2 py-1 rounded">
                           {video.grade}
                         </span>
                       </div>
-                      <h3 className="text-white font-semibold text-lg mb-2">
+                      <h3 className="text-gray-700 font-semibold text-lg mb-2">
                         {video.title}
                       </h3>
                       <div className="flex justify-between items-center">
@@ -475,7 +475,7 @@ export default function LeaderboardPage() {
                               className="object-cover"
                             />
                           </div>
-                          <span className="text-white/60 text-sm">{video.teacher}</span>
+                          <span className="text-gray-700 text-sm">{video.teacher}</span>
                         </div>
                         <div className="flex items-center bg-white/20 px-2 py-1 rounded">
                           <svg
@@ -498,7 +498,7 @@ export default function LeaderboardPage() {
           {/* Topik Terpopuler */}
           {activeTab === "topics" && (
             <div>
-              <h2 className="text-xl font-bold text-white mb-6">Topik Terpopuler</h2>
+              <h2 className="text-xl font-bold text-gray-700 mb-6">Topik Terpopuler</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {popularTopics.map((topic) => (
@@ -508,25 +508,25 @@ export default function LeaderboardPage() {
                         {topic.icon}
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-white font-semibold text-lg">{topic.name}</h3>
+                        <h3 className="text-gray-700 font-semibold text-lg">{topic.name}</h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-white/60 text-sm">{topic.subject}</span>
+                          <span className="text-gray-700 text-sm">{topic.subject}</span>
                           <span className="w-1 h-1 bg-white/40 rounded-full"></span>
-                          <span className="text-white/60 text-sm">{topic.grade}</span>
+                          <span className="text-gray-700 text-sm">{topic.grade}</span>
                         </div>
                         <div className="flex justify-between mt-3">
                           <div>
-                            <div className="text-white/40 text-xs">Total Video</div>
-                            <div className="text-white font-medium">{topic.totalVideos}</div>
+                            <div className="text-gray-700 text-xs">Total Video</div>
+                            <div className="text-gray-700 font-medium">{topic.totalVideos}</div>
                           </div>
                           <div>
-                            <div className="text-white/40 text-xs">Total Views</div>
-                            <div className="text-white font-medium">{topic.totalViews}</div>
+                            <div className="text-gray-700 text-xs">Total Views</div>
+                            <div className="text-gray-700 font-medium">{topic.totalViews}</div>
                           </div>
                           <div>
                             <Link 
                               href={`/pages/topic/${topic.id}`}
-                              className="bg-[var(--peachy-pink)] text-white text-sm px-3 py-1 rounded-lg hover:opacity-90 transition-opacity"
+                              className="bg-[var(--peachy-pink)] text-gray-700 text-sm px-3 py-1 rounded-lg hover:opacity-90 transition-opacity"
                             >
                               Lihat
                             </Link>
