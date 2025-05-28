@@ -22,7 +22,7 @@ export default function RegisterModal({
     email: "",
     full_name: "",
     grade: "",
-    avatar_url: "https://vovgbtfzhhahzxrbrtzy.supabase.co/storage/v1/object/public/avatars//10015419.png",
+    avatar_url: ""
   });
 
 

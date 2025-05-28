@@ -19,8 +19,10 @@ const Header: React.FC = () => {
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
   const [userGrade, setUserGrade] = useState<string>("");
+  const [userRole, setUserRole] = useState<string>("");
   const [subjects, setSubjects] = useState<Subject[]>([]);
 
   useEffect(() => {
@@ -33,19 +35,23 @@ const Header: React.FC = () => {
         setIsLoggedIn(true);
         const { data: profile } = await supabase
           .from("users")
-          .select("avatar_url, full_name, grade")
+          .select("id, avatar_url, full_name, grade, role")
           .eq("id", session.user.id)
           .single();
 
         if (profile) {
-          if (profile.avatar_url) {
-            setUserAvatar(profile.avatar_url);
-          }
+          setUserId(profile.id);
+          // if (profile.avatar_url) {
+          //   setUserAvatar(profile.avatar_url);
+          // }
           if (profile.full_name) {
             setUserName(profile.full_name);
           }
           if (profile.grade) {
             setUserGrade(`Kelas ${profile.grade}`);
+          }
+          if (profile.role) {
+            setUserRole(profile.role);
           }
         }
       } else {
@@ -170,6 +176,23 @@ const Header: React.FC = () => {
     setIsProfileMenuOpen(false);
   };
 
+  const handleDashboardClick = () => {
+    if (!isLoggedIn) {
+      {
+      }
+    } else {
+      if (userRole === "student") {
+        window.location.href = `/pages/dashboard/student/${userId}`;
+      }
+      if (userRole === "teacher") {
+        window.location.href = `/pages/dashboard/teacher/${userId}`;
+      }
+      if (userRole === "admin") {
+        window.location.href = `/pages/dashboard/admin`;
+      }
+    }
+  };
+
   return (
     <header className="relative border-b border-gray-200">
       <div className="h-16 flex justify-between items-center py-2 px-4 md:px-8 lg:px-16">
@@ -263,7 +286,7 @@ const Header: React.FC = () => {
               About
             </Link>
             <Link
-              href={`/pages/dashboard/student/${1}`}
+              href={`/pages/dashboard/student/${userId}`}
               className="bg-kelasin-purple text-white px-3 py-2 text-sm rounded-md hover:bg-opacity-90 transition-colors"
             >
               Dashboard
@@ -462,12 +485,12 @@ const Header: React.FC = () => {
               >
                 About
               </Link>
-              <Link
-                href={`/pages/dashboard/student/${1}`}
+              <button
+                onClick={handleDashboardClick}
                 className="text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm whitespace-nowrap"
               >
                 Dashboard
-              </Link>
+              </button>
             </div>
           </div>
         )}
