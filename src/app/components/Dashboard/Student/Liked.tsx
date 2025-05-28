@@ -74,7 +74,7 @@ export default function Liked() {
 
     return (
         <div className="p-6">
-            <h1 className="text-3xl font-bold text-white mb-8">Video yang Disukai</h1>
+            <h1 className="text-3xl font-bold text-kelasin-purple mb-8">Video yang Disukai</h1>
             
             {isLoading ? (
                 <div className="flex justify-center items-center py-12 bg-white/5 rounded-lg">
