@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, FormEvent } from "react";
-import supabase from "@/lib/supabase";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/auth-context";
 
 // Definisi interface untuk Chapter
 interface Chapter {
@@ -11,21 +11,23 @@ interface Chapter {
   duration: string;
 }
 
+interface Subject {
+  id: string;
+  title: string;
+}
+
 export default function UploadVideo() {
   const router = useRouter();
+  const { user, token } = useAuth();
+  
+  // Form states
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [subject, setSubject] = useState("");
   const [grade, setGrade] = useState("");
   const [price, setPrice] = useState(0);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  // Field baru sesuai dengan data yang diberikan
+  const [videoUrl, setVideoUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [instructor, setInstructor] = useState("");
   const [duration, setDuration] = useState("");
   const [rating, setRating] = useState(0);
@@ -34,27 +36,86 @@ export default function UploadVideo() {
   const [chapterTitle, setChapterTitle] = useState("");
   const [chapterDuration, setChapterDuration] = useState("");
 
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  // UI states
+  const [isUploading, setIsUploading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [showNewSubjectForm, setShowNewSubjectForm] = useState(false);
+  const [newSubjectTitle, setNewSubjectTitle] = useState("");
 
-  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setVideoFile(e.target.files[0]);
+  // Load subjects on component mount
+  useEffect(() => {
+    if (user && token) {
+      fetchSubjects();
+      // Set instructor name from user data
+      if (user.full_name) {
+        setInstructor(user.full_name);
+      }
+    }
+  }, [user, token]);
+
+  const fetchSubjects = async () => {
+    if (!token) return;
+
+    try {
+      setLoadingSubjects(true);
+      const response = await fetch('/api/teacher/subjects', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSubjects(data.subjects);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    } finally {
+      setLoadingSubjects(false);
     }
   };
 
-  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setThumbnailFile(e.target.files[0]);
+  const createNewSubject = async () => {
+    if (!token || !newSubjectTitle.trim()) return;
+
+    try {
+      const response = await fetch('/api/teacher/subjects', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title: newSubjectTitle.trim() })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSubjects(prev => [...prev, data.subject]);
+        setSubject(data.subject.id);
+        setNewSubjectTitle("");
+        setShowNewSubjectForm(false);
+      } else {
+        setErrorMessage(data.error || 'Gagal menambahkan mata pelajaran');
+      }
+    } catch (error) {
+      console.error('Error creating subject:', error);
+      setErrorMessage('Terjadi kesalahan saat menambahkan mata pelajaran');
     }
   };
 
   const addChapter = () => {
-    if (chapterTitle && chapterDuration) {
+    if (chapterTitle.trim() && chapterDuration.trim()) {
       const newChapter: Chapter = {
         id: `${Date.now()}`,
-        title: chapterTitle,
-        duration: chapterDuration,
+        title: chapterTitle.trim(),
+        duration: chapterDuration.trim(),
       };
       setChapters([...chapters, newChapter]);
       setChapterTitle("");
@@ -72,15 +133,82 @@ export default function UploadVideo() {
     setSubject("");
     setGrade("");
     setPrice(0);
-    setVideoFile(null);
-    setThumbnailFile(null);
-    setInstructor("");
+    setVideoUrl("");
+    setThumbnailUrl("");
+    setInstructor(user?.full_name || "");
     setDuration("");
     setRating(0);
     setViews(0);
     setChapters([]);
-    if (videoInputRef.current) videoInputRef.current.value = "";
-    if (thumbnailInputRef.current) thumbnailInputRef.current.value = "";
+    setChapterTitle("");
+    setChapterDuration("");
+  };
+
+  const validateForm = () => {
+    if (!title.trim()) {
+      setErrorMessage("Judul video harus diisi");
+      return false;
+    }
+
+    if (!subject) {
+      setErrorMessage("Mata pelajaran harus dipilih");
+      return false;
+    }
+
+    if (!grade) {
+      setErrorMessage("Kelas harus dipilih");
+      return false;
+    }
+
+    if (!videoUrl.trim()) {
+      setErrorMessage("URL video harus diisi");
+      return false;
+    }
+
+    // Validate video URL
+    try {
+      new URL(videoUrl);
+    } catch {
+      setErrorMessage("URL video tidak valid");
+      return false;
+    }
+
+    // Validate thumbnail URL if provided
+    if (thumbnailUrl.trim()) {
+      try {
+        new URL(thumbnailUrl);
+      } catch {
+        setErrorMessage("URL thumbnail tidak valid");
+        return false;
+      }
+    }
+
+    if (!instructor.trim()) {
+      setErrorMessage("Nama instruktur harus diisi");
+      return false;
+    }
+
+    if (!duration.trim()) {
+      setErrorMessage("Durasi harus diisi");
+      return false;
+    }
+
+    if (price < 0) {
+      setErrorMessage("Harga tidak boleh negatif");
+      return false;
+    }
+
+    if (rating < 0 || rating > 5) {
+      setErrorMessage("Rating harus antara 0-5");
+      return false;
+    }
+
+    if (views < 0) {
+      setErrorMessage("Jumlah views tidak boleh negatif");
+      return false;
+    }
+
+    return true;
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -88,120 +216,74 @@ export default function UploadVideo() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    // Validasi form
-    if (
-      !title ||
-      !subject ||
-      !grade ||
-      !videoFile ||
-      !instructor ||
-      !duration
-    ) {
-      setErrorMessage(
-        "Judul, mata pelajaran, kelas, file video, instruktur, dan durasi harus diisi"
-      );
+    if (!validateForm()) {
+      return;
+    }
+
+    if (!user || !token) {
+      setErrorMessage("Anda harus login terlebih dahulu");
       return;
     }
 
     try {
       setIsUploading(true);
 
-      // Dapatkan user saat ini
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Anda harus login terlebih dahulu");
-
-      // Periksa apakah user adalah guru
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (userError || !userData || userData.role !== "teacher") {
-        throw new Error("Hanya guru yang dapat mengunggah video");
-      }
-
-      // Upload video ke storage
-      const videoFileName = `${user.id}/${Date.now()}-${videoFile.name}`;
-      const { error: videoUploadError } = await supabase.storage
-        .from("videos")
-        .upload(videoFileName, videoFile, {
-          cacheControl: "3600",
-          upsert: false,
-          onUploadProgress: (progress) => {
-            setUploadProgress(
-              Math.round((progress.loaded / progress.total) * 100)
-            );
-          },
-        });
-
-      if (videoUploadError) throw videoUploadError;
-
-      // Dapatkan URL publik untuk video
-      const { data: videoUrl } = supabase.storage
-        .from("videos")
-        .getPublicUrl(videoFileName);
-
-      let thumbnailUrl = null;
-
-      // Upload thumbnail jika ada
-      if (thumbnailFile) {
-        const thumbnailFileName = `${user.id}/${Date.now()}-${
-          thumbnailFile.name
-        }`;
-        const { error: thumbnailUploadError } = await supabase.storage
-          .from("thumbnails")
-          .upload(thumbnailFileName, thumbnailFile, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (thumbnailUploadError) throw thumbnailUploadError;
-
-        // Dapatkan URL publik untuk thumbnail
-        const { data: thumbUrl } = supabase.storage
-          .from("thumbnails")
-          .getPublicUrl(thumbnailFileName);
-
-        thumbnailUrl = thumbUrl.publicUrl;
-      }
-
-      // Simpan metadata video ke database
-      const { error: insertError } = await supabase.from("videos").insert({
-        title,
-        description,
+      const videoData = {
+        title: title.trim(),
+        description: description.trim() || null,
         subject,
         grade,
-        thumbnail: thumbnailUrl,
-        video_url: videoUrl.publicUrl,
-        price: price,
-        teacher_id: user.id,
-        instructor: instructor,
-        duration: duration,
-        rating: rating,
-        views: views.toString(),
-        chapters: chapters,
+        price,
+        video_url: videoUrl.trim(),
+        thumbnail_url: thumbnailUrl.trim() || null,
+        instructor: instructor.trim(),
+        duration: duration.trim(),
+        rating,
+        views,
+        chapters: chapters.length > 0 ? chapters : []
+      };
+
+      const response = await fetch('/api/teacher/videos/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(videoData)
       });
 
-      if (insertError) throw insertError;
+      const data = await response.json();
 
-      setSuccessMessage("Video berhasil diunggah!");
-      resetForm();
-      setTimeout(() => {
-        router.refresh();
-      }, 2000);
+      if (data.success) {
+        setSuccessMessage(data.message || "Video berhasil diunggah!");
+        resetForm();
+        
+        // Refresh after 2 seconds
+        setTimeout(() => {
+          router.refresh();
+        }, 2000);
+      } else {
+        throw new Error(data.error || 'Gagal mengunggah video');
+      }
+
     } catch (error: any) {
       console.error("Error uploading video:", error);
-      setErrorMessage(
-        error.message || "Terjadi kesalahan saat mengunggah video"
-      );
+      setErrorMessage(error.message || "Terjadi kesalahan saat mengunggah video");
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
     }
   };
+
+  // Auto-clear messages
+  useEffect(() => {
+    if (errorMessage || successMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage("");
+        setSuccessMessage("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage, successMessage]);
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
@@ -266,15 +348,61 @@ export default function UploadVideo() {
               >
                 Mata Pelajaran <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                id="subject"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Contoh: Matematika, Fisika, Biologi"
-                required
-              />
+              <div className="flex gap-2">
+                <select
+                  id="subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={loadingSubjects}
+                >
+                  <option value="">
+                    {loadingSubjects ? "Memuat..." : "Pilih Mata Pelajaran"}
+                  </option>
+                  {subjects.map((subj) => (
+                    <option key={subj.id} value={subj.id}>
+                      {subj.title}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowNewSubjectForm(!showNewSubjectForm)}
+                  className="px-3 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  +
+                </button>
+              </div>
+              
+              {showNewSubjectForm && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="text"
+                    value={newSubjectTitle}
+                    onChange={(e) => setNewSubjectTitle(e.target.value)}
+                    placeholder="Nama mata pelajaran baru"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={createNewSubject}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    Tambah
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewSubjectForm(false);
+                      setNewSubjectTitle("");
+                    }}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  >
+                    Batal
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -406,109 +534,58 @@ export default function UploadVideo() {
           <div className="space-y-6">
             <div>
               <label
-                htmlFor="video"
+                htmlFor="video-url"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                File Video <span className="text-red-500">*</span>
+                URL Video <span className="text-red-500">*</span>
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="video-upload"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
-                    >
-                      <span>Upload video</span>
-                      <input
-                        id="video-upload"
-                        name="video-upload"
-                        type="file"
-                        className="sr-only"
-                        accept="video/*"
-                        onChange={handleVideoChange}
-                        ref={videoInputRef}
-                        required
-                      />
-                    </label>
-                    <p className="pl-1">atau drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    MP4, WebM, atau Ogg hingga 2GB
-                  </p>
-                  {videoFile && (
-                    <p className="text-sm text-green-600 mt-2">
-                      File dipilih: {videoFile.name}
-                    </p>
-                  )}
-                </div>
-              </div>
+              <input
+                type="url"
+                id="video-url"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="https://example.com/video.mp4"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Masukkan URL video yang dapat diakses publik (YouTube, Vimeo, atau link hosting video lainnya)
+              </p>
             </div>
 
             <div>
               <label
-                htmlFor="thumbnail"
+                htmlFor="thumbnail-url"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Thumbnail Video
+                URL Thumbnail
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="thumbnail-upload"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
-                    >
-                      <span>Upload thumbnail</span>
-                      <input
-                        id="thumbnail-upload"
-                        name="thumbnail-upload"
-                        type="file"
-                        className="sr-only"
-                        accept="image/*"
-                        onChange={handleThumbnailChange}
-                        ref={thumbnailInputRef}
-                      />
-                    </label>
-                    <p className="pl-1">atau drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, GIF hingga 5MB
-                  </p>
-                  {thumbnailFile && (
-                    <p className="text-sm text-green-600 mt-2">
-                      File dipilih: {thumbnailFile.name}
-                    </p>
-                  )}
+              <input
+                type="url"
+                id="thumbnail-url"
+                value={thumbnailUrl}
+                onChange={(e) => setThumbnailUrl(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="https://example.com/thumbnail.jpg"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Masukkan URL gambar thumbnail (opsional)
+              </p>
+              
+              {thumbnailUrl && (
+                <div className="mt-2">
+                  <p className="text-sm text-green-600 mb-2">Preview thumbnail:</p>
+                  <img
+                    src={thumbnailUrl}
+                    alt="Thumbnail preview"
+                    className="w-32 h-20 object-cover rounded border"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                    }}
+                  />
                 </div>
-              </div>
+              )}
             </div>
 
             <div>
@@ -591,18 +668,6 @@ export default function UploadVideo() {
           </div>
         </div>
 
-        {isUploading && (
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div
-              className="bg-blue-600 h-2.5 rounded-full"
-              style={{ width: `${uploadProgress}%` }}
-            ></div>
-            <p className="text-sm text-gray-600 mt-1 text-center">
-              Mengunggah... {uploadProgress}%
-            </p>
-          </div>
-        )}
-
         <div className="flex justify-end">
           <button
             type="button"
@@ -614,7 +679,7 @@ export default function UploadVideo() {
           </button>
           <button
             type="submit"
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isUploading}
           >
             {isUploading ? "Mengunggah..." : "Unggah Video"}

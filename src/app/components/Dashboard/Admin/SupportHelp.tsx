@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import supabase from "@/lib/supabase";
 import Image from "next/image";
 import { FiHelpCircle, FiMessageSquare, FiBook, FiAlertCircle, FiPhone, FiEdit, FiTrash2, FiPlus } from "react-icons/fi";
 

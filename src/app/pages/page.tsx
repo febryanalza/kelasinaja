@@ -1,57 +1,56 @@
 "use client";
-import React, { useEffect } from "react";
+import React from "react";
 import Header from "../components/layouts/Navbar";
-import supabase from "@/lib/supabase";
 import RenderVideo from "../components/layouts/RenderVideo";
 import Image from "next/image";
 
 export default function LandingPage() {
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        await supabase
-          .from("users")
-          .select("avatar_url")
-          .eq("id", session.user.id)
-          .single();
-      }
-    };
-
-    fetchUserProfile();
-  }, []);
-
   // Data dummy untuk video populer
   const popularVideos = [
     {
-      id: 1,
+      id: "1",
       title: "Integral Dasar",
+      description: "Pelajari konsep dasar integral dengan mudah",
       subject: "Matematika",
-      grade: "Kelas 12",
+      grade: "12",
       thumbnail: "/images/integral.jpg",
-      views: "1.2k",
+      video_url: "",
+      price: 0,
+      views: 1200,
       rating: 4.8,
+      teacher_id: "teacher-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     },
     {
-      id: 2,
+      id: "2",
       title: "Hukum Newton",
+      description: "Memahami hukum-hukum Newton dalam fisika",
       subject: "Fisika",
-      grade: "Kelas 10",
+      grade: "10",
       thumbnail: "/images/integral.jpg",
-      views: "980",
+      video_url: "",
+      price: 50000,
+      views: 980,
       rating: 4.7,
+      teacher_id: "teacher-2",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     },
     {
-      id: 3,
+      id: "3",
       title: "Stoikiometri",
+      description: "Konsep perhitungan kimia yang penting",
       subject: "Kimia",
-      grade: "Kelas 11",
+      grade: "11",
       thumbnail: "/images/integral.jpg",
-      views: "850",
+      video_url: "",
+      price: 75000,
+      views: 850,
       rating: 4.6,
+      teacher_id: "teacher-3",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     },
   ];
 
@@ -97,7 +96,9 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen bg-white">
-      <Header /> {/* Hero Section - sesuai dengan gambar */}
+      <Header />
+      
+      {/* Hero Section */}
       <section className="relative py-12 lg:py-20 overflow-hidden">
         <div className="container mx-auto px-4 lg:px-8">
           <div className="flex flex-col lg:flex-row lg:items-center">
@@ -135,14 +136,15 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Background decorative elements for larger screens */}
+        {/* Background decorative elements */}
         <div className="hidden lg:block">
           <div className="absolute -bottom-10 -right-10 w-80 h-80 bg-kelasin-yellow opacity-10 rounded-full"></div>
           <div className="absolute top-20 -right-10 w-40 h-40 bg-kelasin-purple opacity-10 rounded-full"></div>
           <div className="absolute -top-10 right-40 w-24 h-24 bg-kelasin-purple opacity-10 rounded-full"></div>
           <div className="absolute bottom-10 right-20 w-16 h-16 bg-kelasin-yellow opacity-10 rounded-full"></div>
         </div>
-      </section>{" "}
+      </section>
+
       {/* Popular Videos Section */}
       <section className="py-16 px-4 lg:px-8 bg-gray-50">
         <div className="container mx-auto">
@@ -153,6 +155,7 @@ export default function LandingPage() {
           />
         </div>
       </section>
+
       {/* Subject Categories Section */}
       <section className="py-16 px-4 lg:px-8">
         <div className="container mx-auto">
@@ -176,7 +179,8 @@ export default function LandingPage() {
             ))}
           </div>
         </div>
-      </section>{" "}
+      </section>
+
       {/* Why Choose Us Section */}
       <section className="py-16 px-4 lg:px-8 bg-kelasin-purple bg-opacity-5">
         <div className="container mx-auto">

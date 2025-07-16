@@ -1,13 +1,32 @@
 "use client";
 
-import { useState, useRef } from "react";
-import supabase from "@/lib/supabase";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface RegisterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  switchToLogin: () => void; // Fungsi untuk beralih ke modal login
+  switchToLogin: () => void;
+}
+
+interface FormData {
+  email: string;
+  password: string;
+  full_name: string;
+  grade: string;
+}
+
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  user?: {
+    id: string;
+    email: string;
+    full_name: string;
+    grade: string;
+    role: string;
+  };
 }
 
 export default function RegisterModal({
@@ -18,15 +37,17 @@ export default function RegisterModal({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [formData, setFormData] = useState({
+  const [success, setSuccess] = useState("");
+  
+  const [formData, setFormData] = useState<FormData>({
     email: "",
+    password: "",
     full_name: "",
     grade: "",
-    avatar_url: ""
   });
 
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle input changes
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -34,83 +55,65 @@ export default function RegisterModal({
     }));
   };
 
-
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
-      if (!supabase) {
-        throw new Error("Supabase client not initialized");
-      }
-
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: (e.target as HTMLFormElement).password.value,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(formData),
       });
 
-      if (signUpError) {
-        console.error("Signup error:", signUpError);
-        setError(signUpError.message);
-        return;
+      // Parse response
+      const data: ApiResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Registrasi gagal');
       }
 
-      if (!data.user) {
-        throw new Error("No user data returned after signup");
-        
-      }
-
-      // Upload avatar jika ada
+      // Success
+      setSuccess(data.message || 'Registrasi berhasil!');
       
+      // Reset form
+      setFormData({
+        email: "",
+        password: "",
+        full_name: "",
+        grade: "",
+      });
 
-      const { error: profileError } = await supabase
-      .from('users')
-      .insert([
-        {
-          id: data.user.id,
-          email: data.user.email,
-          full_name: formData.full_name,
-          grade: parseInt(formData.grade),
-          avatar_url: formData.avatar_url,
-          role: "student",
-        },
-      ])
-      .select();
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        setSuccess("");
+        onClose();
+        switchToLogin();
+      }, 2000);
 
-      if (profileError) {
-        console.error("Profile creation error:", profileError);
-        setError(profileError.message);
-        return;
-      }
-
-      // Tutup modal setelah berhasil mendaftar
-      onClose();
-      // Refresh halaman untuk memperbarui status login
-      router.refresh();
-    } catch (e) {
-      console.error("Registration error:", e);
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError("Terjadi kesalahan saat mendaftar. Silakan coba lagi.");
-      }
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat mendaftar');
     } finally {
       setLoading(false);
     }
   };
 
+  // Don't render if modal is closed
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="relative max-w-md w-full bg-white/10 backdrop-blur-md rounded-xl p-8 max-h-[90vh] overflow-y-auto">
+        {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-white/80 hover:text-white"
+          className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors"
           aria-label="Close"
         >
           <svg
@@ -127,8 +130,9 @@ export default function RegisterModal({
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
-        </button>{" "}
-        {/* Heading dengan tombol switch */}
+        </button>
+
+        {/* Header */}
         <div className="flex flex-col items-center mb-8 border-b border-white/20 pb-4">
           <h2 className="text-2xl font-bold text-kelasin-purple font-kufam mb-4">
             KelasinAja
@@ -145,21 +149,30 @@ export default function RegisterModal({
             </button>
           </div>
         </div>
+
+        {/* Error Message */}
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-500 rounded-lg p-4 mb-6">
             {error}
           </div>
         )}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Avatar upload section */}
-          
 
+        {/* Success Message */}
+        {success && (
+          <div className="bg-green-500/10 border border-green-500 text-green-500 rounded-lg p-4 mb-6">
+            {success}
+          </div>
+        )}
+
+        {/* Registration Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Email Field */}
           <div>
             <label
               htmlFor="email"
-              className="block text-sm font-medium text-white"
+              className="block text-sm font-medium text-white mb-2"
             >
-              Email
+              Email <span className="text-red-400">*</span>
             </label>
             <input
               type="email"
@@ -168,32 +181,39 @@ export default function RegisterModal({
               required
               value={formData.email}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
+              placeholder="contoh@email.com"
+              className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow focus:border-transparent placeholder-white/50"
             />
           </div>
 
+          {/* Password Field */}
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-white"
+              className="block text-sm font-medium text-white mb-2"
             >
-              Password
+              Password <span className="text-red-400">*</span>
             </label>
             <input
               type="password"
               name="password"
               id="password"
               required
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
+              minLength={6}
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="Minimal 6 karakter"
+              className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow focus:border-transparent placeholder-white/50"
             />
           </div>
 
+          {/* Full Name Field */}
           <div>
             <label
               htmlFor="full_name"
-              className="block text-sm font-medium text-white"
+              className="block text-sm font-medium text-white mb-2"
             >
-              Nama Lengkap
+              Nama Lengkap <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -202,49 +222,76 @@ export default function RegisterModal({
               required
               value={formData.full_name}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
+              placeholder="Nama lengkap Anda"
+              className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow focus:border-transparent placeholder-white/50"
             />
           </div>
 
+          {/* Grade Field */}
           <div>
             <label
               htmlFor="grade"
-              className="block text-sm font-medium text-white"
+              className="block text-sm font-medium text-white mb-2"
             >
-              Kelas
+              Kelas <span className="text-red-400">*</span>
             </label>
-            <input
-              type="number"
+            <select
               name="grade"
               id="grade"
-              min="10"
-              max="12"
               required
               value={formData.grade}
               onChange={handleChange}
-              className="mt-1 block w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow"
-            />
+              className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-kelasin-yellow focus:border-transparent"
+            >
+              <option value="" className="bg-gray-800">Pilih Kelas</option>
+              <option value="10" className="bg-gray-800">Kelas 10</option>
+              <option value="11" className="bg-gray-800">Kelas 11</option>
+              <option value="12" className="bg-gray-800">Kelas 12</option>
+            </select>
           </div>
 
-          {/* Menghapus input URL avatar karena sudah diganti dengan upload file */}
-
-          <div className="flex gap-4">
+          {/* Submit Buttons */}
+          <div className="flex gap-4 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="w-full bg-white/10 text-white rounded-lg px-4 py-2 font-medium hover:bg-white/20 transition-opacity"
+              disabled={loading}
+              className="w-full bg-white/10 text-white rounded-lg px-4 py-3 font-medium hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Kembali
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-kelasin-purple text-white rounded-lg px-4 py-2 font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="w-full bg-kelasin-purple text-white rounded-lg px-4 py-3 font-medium hover:bg-kelasin-purple/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              {loading ? "Mendaftar..." : "Daftar"}
+              {loading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Mendaftar...
+                </>
+              ) : (
+                'Daftar'
+              )}
             </button>
           </div>
         </form>
+
+        {/* Login Link */}
+        <div className="text-center mt-6 pt-4 border-t border-white/20">
+          <p className="text-white/60">
+            Sudah punya akun?{' '}
+            <button
+              onClick={switchToLogin}
+              className="text-kelasin-yellow hover:text-kelasin-yellow/80 font-medium transition-colors"
+            >
+              Login di sini
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );

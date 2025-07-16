@@ -1,65 +1,48 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import supabase from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import RenderVideo from '@/app/components/layouts/RenderVideo';
 import type { Video } from '@/app/types/interface';
 
-export default function PurchasedVideos() {
+export default function Bought() {
+    const { user, token } = useAuth();
     const [purchasedVideos, setPurchasedVideos] = useState<Video[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         async function fetchPurchasedVideos() {
+            if (!user || !token) {
+                setError('Anda harus login terlebih dahulu');
+                setIsLoading(false);
+                return;
+            }
+
             try {
                 setIsLoading(true);
                 setError(null);
                 
-                // Dapatkan user saat ini
-                const { data: { user } } = await supabase.auth.getUser();
-                
-                if (!user) {
-                    setError('Anda harus login terlebih dahulu');
-                    setIsLoading(false);
-                    return;
+                const response = await fetch(`/api/user/${user.id}/purchased`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Gagal mengambil data video yang dibeli');
                 }
+
+                const data = await response.json();
                 
-                // Ambil data video yang telah dibeli oleh pengguna
-                const { data: purchasedData, error: purchasedError } = await supabase
-                    .from('purchased_videos')
-                    .select('video_id')
-                    .eq('user_id', user.id);
-                
-                if (purchasedError) throw purchasedError;
-                
-                if (purchasedData && purchasedData.length > 0) {
-                    // Ambil detail video berdasarkan ID yang telah dibeli
-                    const videoIds = purchasedData.map(item => item.video_id);
-                    
-                    const { data: videosData, error: videosError } = await supabase
-                        .from('videos')
-                        .select('*')
-                        .in('id', videoIds);
-                    
-                    if (videosError) throw videosError;
-                    
-                    // Format data video sesuai dengan interface VideoClass
-                    const formattedVideos: Video[] = videosData.map(video => ({
-                        id: video.id,
-                        title: video.title,
-                        subject: video.subject,
-                        grade: video.grade,
-                        thumbnail: video.thumbnail || '/images/integral.jpg', // Fallback jika tidak ada thumbnail
-                        views: video.views || '0',
-                        rating: video.rating || 0,
-                        isBought: true
-                    }));
-                    
-                    setPurchasedVideos(formattedVideos);
+                if (data.success) {
+                    setPurchasedVideos(data.videos);
                 } else {
-                    setPurchasedVideos([]);
+                    throw new Error(data.error || 'Gagal memuat data video yang dibeli');
                 }
+                
             } catch (error: any) {
                 console.error('Error fetching purchased videos:', error);
                 setError(error.message || 'Terjadi kesalahan saat mengambil data video');
@@ -69,7 +52,7 @@ export default function PurchasedVideos() {
         }
         
         fetchPurchasedVideos();
-    }, []);
+    }, [user, token]);
 
     return (
         <div className="p-6">
@@ -92,6 +75,7 @@ export default function PurchasedVideos() {
                     title="" 
                     emptyStateMessage="Belum ada kelas yang dibeli" 
                     showFilters={purchasedVideos.length > 3}
+                    showPurchaseInfo={true}
                 />
             )}
         </div>

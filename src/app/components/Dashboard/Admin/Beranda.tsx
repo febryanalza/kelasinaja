@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import supabase from "@/lib/supabase";
 import Image from "next/image";
+import { useAuth } from "@/context/auth-context";
 import { FiUsers, FiVideo, FiDollarSign, FiTrendingUp, FiActivity, FiBell, FiAlertCircle, FiInfo } from "react-icons/fi";
 
 // Interface untuk statistik platform
@@ -24,11 +24,12 @@ interface GrowthData {
 
 // Interface untuk aktivitas
 interface Activity {
-  id: number;
+  id: string;
   user_name: string;
   user_avatar?: string;
   action: string;
   timestamp: string;
+  type: string;
 }
 
 // Interface untuk alert/notifikasi
@@ -126,6 +127,8 @@ const AlertItem = ({ title, message, type, time }: Alert) => {
 };
 
 export default function Beranda() {
+  const { token } = useAuth();
+  
   // State untuk statistik platform
   const [stats, setStats] = useState<PlatformStats>({
     totalStudents: 0,
@@ -147,160 +150,56 @@ export default function Beranda() {
   
   // State untuk loading
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (!token) {
+        setError('Token tidak tersedia');
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Fetch total pengguna aktif (siswa)
-        const { data: students, error: studentsError } = await supabase
-          .from('users')
-          .select('count', { count: 'exact' })
-          .eq('role', 'student');
-          
-        if (studentsError) throw studentsError;
-        
-        // Fetch total pengguna aktif (guru)
-        const { data: teachers, error: teachersError } = await supabase
-          .from('users')
-          .select('count', { count: 'exact' })
-          .eq('role', 'teacher');
-          
-        if (teachersError) throw teachersError;
-        
-        // Fetch total video pembelajaran
-        const { data: videos, error: videosError } = await supabase
-          .from('videos')
-          .select('count', { count: 'exact' });
-          
-        if (videosError) throw videosError;
-        
-        // Fetch total transaksi
-        const { data: transactions, error: transactionsError } = await supabase
-          .from('token_transactions')
-          .select('count', { count: 'exact' });
-          
-        if (transactionsError) throw transactionsError;
-        
-        // Fetch pendapatan harian
-        const today = new Date();
-        const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-        const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-        
-        const { data: dailyRevenue, error: dailyRevenueError } = await supabase
-          .from('token_transactions')
-          .select('amount')
-          .eq('transaction_type', 'purchase')
-          .eq('payment_status', 'completed')
-          .gte('created_at', startOfDay)
-          .lte('created_at', endOfDay);
-          
-        if (dailyRevenueError) throw dailyRevenueError;
-        
-        // Fetch pendapatan bulanan
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-        
-        const { data: monthlyRevenue, error: monthlyRevenueError } = await supabase
-          .from('token_transactions')
-          .select('amount')
-          .eq('transaction_type', 'purchase')
-          .eq('payment_status', 'completed')
-          .gte('created_at', startOfMonth)
-          .lte('created_at', endOfMonth);
-          
-        if (monthlyRevenueError) throw monthlyRevenueError;
-        
-        // Hitung total pendapatan harian dan bulanan
-        const dailyTotal = dailyRevenue?.reduce((sum, item) => sum + item.amount, 0) || 0;
-        const monthlyTotal = monthlyRevenue?.reduce((sum, item) => sum + item.amount, 0) || 0;
-        
-        // Update state statistik
-        setStats({
-          totalStudents: students?.[0]?.count || 0,
-          totalTeachers: teachers?.[0]?.count || 0,
-          totalVideos: videos?.[0]?.count || 0,
-          totalTransactions: transactions?.[0]?.count || 0,
-          dailyRevenue: dailyTotal,
-          monthlyRevenue: monthlyTotal
-        });
-        
-        // Fetch data pertumbuhan pengguna (6 bulan terakhir)
-        // Dalam implementasi nyata, ini akan mengambil data dari tabel atau view khusus
-        // Untuk demo, kita gunakan data dummy
-        const dummyGrowthData = [
-          { date: 'Jan', students: 120, teachers: 20 },
-          { date: 'Feb', students: 150, teachers: 22 },
-          { date: 'Mar', students: 200, teachers: 25 },
-          { date: 'Apr', students: 320, teachers: 30 },
-          { date: 'Mei', students: 400, teachers: 35 },
-          { date: 'Jun', students: 450, teachers: 40 }
-        ];
-        
-        setGrowthData(dummyGrowthData);
-        
-        // Fetch aktivitas terbaru
-        const { data: recentActivities, error: activitiesError } = await supabase
-          .from('activity_logs')
-          .select('id, user_id, activity_type, description, created_at')
-          .order('created_at', { ascending: false })
-          .limit(5);
-          
-        if (activitiesError) throw activitiesError;
-        
-        // Fetch user details for activities
-        if (recentActivities && recentActivities.length > 0) {
-          const userIds = recentActivities.map(activity => activity.user_id);
-          
-          const { data: users, error: usersError } = await supabase
-            .from('users')
-            .select('id, full_name, avatar_url')
-            .in('id', userIds);
-            
-          if (usersError) throw usersError;
-          
-          // Map activities with user details
-          const activitiesWithUserDetails = recentActivities.map(activity => {
-            const user = users?.find(u => u.id === activity.user_id);
-            return {
-              id: activity.id,
-              user_name: user?.full_name || 'Unknown User',
-              user_avatar: user?.avatar_url,
-              action: activity.description,
-              timestamp: new Date(activity.created_at).toLocaleString('id-ID', {
-                day: 'numeric',
-                month: 'long',
-                hour: '2-digit',
-                minute: '2-digit'
-              })
-            };
-          });
-          
-          setActivities(activitiesWithUserDetails);
-        } else {
-          // Jika tidak ada aktivitas, gunakan data dummy
-          setActivities([
-            {
-              id: 1,
-              user_name: 'Ahmad Rizki',
-              action: 'menambahkan video pembelajaran baru',
-              timestamp: '5 menit yang lalu'
+        // Fetch dashboard statistics
+        const [statsResponse, activitiesResponse] = await Promise.all([
+          fetch('/api/admin/dashboard/stats', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
             },
-            {
-              id: 2,
-              user_name: 'Siti Nurhaliza',
-              action: 'membeli token sebanyak 100',
-              timestamp: '15 menit yang lalu'
+          }),
+          fetch('/api/admin/activities?limit=5', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
             },
-            {
-              id: 3,
-              user_name: 'Budi Santoso',
-              action: 'mendaftar sebagai pengguna baru',
-              timestamp: '1 jam yang lalu'
-            }
-          ]);
+          })
+        ]);
+
+        if (!statsResponse.ok) {
+          const errorData = await statsResponse.json();
+          throw new Error(errorData.error || 'Gagal mengambil statistik dashboard');
         }
-        
-        // Set alerts & notifikasi (data dummy untuk demo)
+
+        if (!activitiesResponse.ok) {
+          const errorData = await activitiesResponse.json();
+          throw new Error(errorData.error || 'Gagal mengambil data aktivitas');
+        }
+
+        const statsData = await statsResponse.json();
+        const activitiesData = await activitiesResponse.json();
+
+        if (statsData.success) {
+          setStats(statsData.stats);
+          setGrowthData(statsData.growthData || []);
+        }
+
+        if (activitiesData.success) {
+          setActivities(activitiesData.activities);
+        }
+
+        // Set dummy alerts for demo
         setAlerts([
           {
             id: 1,
@@ -325,15 +224,16 @@ export default function Beranda() {
           }
         ]);
         
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching dashboard data:', error);
+        setError(error.message || 'Terjadi kesalahan saat mengambil data dashboard');
       } finally {
         setLoading(false);
       }
     };
     
     fetchDashboardData();
-  }, []);
+  }, [token]);
 
   // Format currency
   const formatCurrency = (amount: number) => {
@@ -343,6 +243,16 @@ export default function Beranda() {
       minimumFractionDigits: 0
     }).format(amount);
   };
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-gradient-to-b from-gray-900 to-black min-h-screen">
@@ -398,67 +308,68 @@ export default function Beranda() {
           </div>
           
           {/* Grafik Pertumbuhan Pengguna */}
-          <div className="bg-white/5 rounded-xl p-6 mb-8">
-            <h3 className="text-lg font-semibold text-white mb-4">Pertumbuhan Pengguna (6 Bulan Terakhir)</h3>
-            <div className="h-80 w-full">
-              {/* Implementasi grafik dengan SVG sederhana */}
-              <div className="relative h-64 w-full">
-                {/* Sumbu X dan Y */}
-                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-white/20"></div>
-                <div className="absolute bottom-0 left-0 w-0.5 h-full bg-white/20"></div>
-                
-                {/* Label sumbu X */}
-                <div className="absolute bottom-[-25px] left-0 w-full flex justify-between">
-                  {growthData.map((data, index) => (
-                    <span key={index} className="text-white/60 text-xs">{data.date}</span>
-                  ))}
+          {growthData.length > 0 && (
+            <div className="bg-white/5 rounded-xl p-6 mb-8">
+              <h3 className="text-lg font-semibold text-white mb-4">Pertumbuhan Pengguna</h3>
+              <div className="h-80 w-full">
+                <div className="relative h-64 w-full">
+                  {/* Sumbu X dan Y */}
+                  <div className="absolute bottom-0 left-0 w-full h-0.5 bg-white/20"></div>
+                  <div className="absolute bottom-0 left-0 w-0.5 h-full bg-white/20"></div>
+                  
+                  {/* Label sumbu X */}
+                  <div className="absolute bottom-[-25px] left-0 w-full flex justify-between">
+                    {growthData.map((data, index) => (
+                      <span key={index} className="text-white/60 text-xs">{data.date}</span>
+                    ))}
+                  </div>
+                  
+                  {/* Grafik batang */}
+                  <div className="absolute bottom-0 left-0 w-full flex justify-between items-end h-full">
+                    {growthData.map((data, index) => {
+                      const maxValue = Math.max(...growthData.map(d => Math.max(d.students, d.teachers)));
+                      const studentHeight = maxValue > 0 ? (data.students / maxValue) * 100 : 0;
+                      const teacherHeight = maxValue > 0 ? (data.teachers / maxValue) * 100 : 0;
+                      const barWidth = 100 / (growthData.length * 3);
+                      
+                      return (
+                        <div key={index} className="flex items-end" style={{ width: `${barWidth * 2}%` }}>
+                          <div 
+                            className="bg-blue-500 rounded-t-sm mx-0.5"
+                            style={{ 
+                              height: `${studentHeight}%`,
+                              width: '45%'
+                            }}
+                            title={`Siswa: ${data.students}`}
+                          ></div>
+                          <div 
+                            className="bg-purple-500 rounded-t-sm mx-0.5"
+                            style={{ 
+                              height: `${teacherHeight}%`,
+                              width: '45%'
+                            }}
+                            title={`Guru: ${data.teachers}`}
+                          ></div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 
-                {/* Grafik batang untuk siswa */}
-                <div className="absolute bottom-0 left-0 w-full flex justify-between items-end h-full">
-                  {growthData.map((data, index) => {
-                    const maxValue = Math.max(...growthData.map(d => Math.max(d.students, d.teachers)));
-                    const studentHeight = (data.students / maxValue) * 100;
-                    const teacherHeight = (data.teachers / maxValue) * 100;
-                    const barWidth = 100 / (growthData.length * 3); // Lebar bar
-                    
-                    return (
-                      <div key={index} className="flex items-end" style={{ width: `${barWidth * 2}%` }}>
-                        <div 
-                          className="bg-blue-500 rounded-t-sm mx-0.5"
-                          style={{ 
-                            height: `${studentHeight}%`,
-                            width: '45%'
-                          }}
-                          title={`Siswa: ${data.students}`}
-                        ></div>
-                        <div 
-                          className="bg-purple-500 rounded-t-sm mx-0.5"
-                          style={{ 
-                            height: `${teacherHeight}%`,
-                            width: '45%'
-                          }}
-                          title={`Guru: ${data.teachers}`}
-                        ></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              
-              {/* Legend */}
-              <div className="flex justify-center mt-4 gap-6">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-blue-500 rounded-sm mr-2"></div>
-                  <span className="text-white/80 text-sm">Siswa</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-purple-500 rounded-sm mr-2"></div>
-                  <span className="text-white/80 text-sm">Guru</span>
+                {/* Legend */}
+                <div className="flex justify-center mt-4 gap-6">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-blue-500 rounded-sm mr-2"></div>
+                    <span className="text-white/80 text-sm">Siswa</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-purple-500 rounded-sm mr-2"></div>
+                    <span className="text-white/80 text-sm">Guru</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Aktivitas Terbaru */}

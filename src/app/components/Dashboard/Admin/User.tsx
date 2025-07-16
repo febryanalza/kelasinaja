@@ -2,284 +2,403 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
-import supabase from "@/lib/supabase";
+import { useAuth } from "@/context/auth-context";
+import {
+  FiSearch,
+  FiFilter,
+  FiUser,
+  FiMail,
+  FiCalendar,
+  FiMoreVertical,
+  FiEye,
+  FiUserCheck,
+  FiKey,
+  FiUserX,
+  FiTrash2,
+} from "react-icons/fi";
 
-// Tipe data untuk pengguna
+// Interfaces
 interface User {
   id: string;
   email: string;
   full_name: string;
-  avatar_url: string;
+  avatar_url?: string;
   role: "student" | "teacher" | "admin";
+  grade?: string;
   status: "active" | "suspended" | "pending";
   created_at: string;
+  updated_at: string;
   last_login: string;
+  stats: {
+    total_videos: number;
+    total_purchases: number;
+    total_likes: number;
+    has_tokens: boolean;
+  };
 }
 
-// Tipe data untuk log aktivitas
-interface ActivityLog {
-  id: string;
-  user_id: string;
-  activity_type: string;
-  description: string;
-  created_at: string;
+interface UserDetail extends User {
+  token_balance: number;
+  token_last_updated?: string;
+  stats: {
+    total_videos: number;
+    total_purchases: number;
+    total_likes: number;
+    total_wishlists: number;
+    total_ratings: number;
+  };
+  recent_videos: Array<{
+    id: string;
+    title: string;
+    views: number;
+    rating: number;
+    created_at: string;
+  }>;
+  recent_purchases: Array<{
+    id: string;
+    video_title: string;
+    price_paid: number;
+    payment_status: string;
+    purchase_date: string;
+  }>;
+  recent_likes: Array<{
+    video_title: string;
+    created_at: string;
+  }>;
+  activity_logs: Array<{
+    id: string;
+    activity_type: string;
+    description: string;
+    created_at: string;
+  }>;
+}
+
+interface UserStats {
+  total_users: number;
+  recent_users: number;
+  active_users_this_week: number;
+  users_by_role: {
+    admin: number;
+    teacher: number;
+    student: number;
+  };
+  top_teachers: Array<{
+    id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+    video_count: number;
+    created_at: string;
+  }>;
+  top_students: Array<{
+    id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+    purchase_count: number;
+    created_at: string;
+  }>;
+}
+
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export default function User() {
-  // State untuk data pengguna
+  const { user: currentUser, token } = useAuth();
+
+  // State untuk data
   const [users, setUsers] = useState<User[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [userDetail, setUserDetail] = useState<UserDetail | null>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+
+  // State untuk loading dan error
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
 
   // State untuk filter
-  const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [filters, setFilters] = useState({
+    role: "all",
+    dateFilter: "all",
+    search: "",
+  });
 
   // State untuk modal
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
-  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] =
-    useState(false);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [confirmAction, setConfirmAction] = useState<string>("");
 
-  // Fungsi untuk mengambil data pengguna dari Supabase
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .order("created_at", { ascending: false });
+  // State untuk form
+  const [resetPasswordForm, setResetPasswordForm] = useState({
+    newPassword: "",
+    generateRandom: true,
+  });
 
-        if (error) {
-          throw error;
-        }
-
-        if (data) {
-          setUsers(data);
-          setFilteredUsers(data);
-        }
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        setError("Gagal mengambil data pengguna");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
-  }, []);
-
-  // Fungsi untuk mengambil log aktivitas pengguna
-  const fetchUserActivityLogs = async (userId: string) => {
+  // API Calls
+  const fetchUsers = async (page: number = 1) => {
     try {
-      const { data, error } = await supabase
-        .from("activity_logs")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      setLoading(true);
+      setError("");
 
-      if (error) {
-        throw error;
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.limit.toString(),
+        ...(filters.search && { search: filters.search }),
+        ...(filters.role !== "all" && { role: filters.role }),
+        ...(filters.dateFilter !== "all" && { dateFilter: filters.dateFilter }),
+      });
+
+      const response = await fetch(`/api/admin/users?${params}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data pengguna");
       }
 
-      if (data) {
-        setActivityLogs(data);
+      const data = await response.json();
+      if (data.success) {
+        setUsers(data.users);
+        setPagination(data.pagination);
+      } else {
+        throw new Error(data.error || "Gagal mengambil data pengguna");
       }
-    } catch (error) {
-      console.error("Error fetching activity logs:", error);
-      setError("Gagal mengambil log aktivitas");
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Fungsi untuk menerapkan filter
-  useEffect(() => {
-    let result = [...users];
+  const fetchUserDetail = async (userId: string) => {
+    try {
+      setLoadingDetail(true);
 
-    // Filter berdasarkan role
-    if (roleFilter !== "all") {
-      result = result.filter((user) => user.role === roleFilter);
-    }
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
-    // Filter berdasarkan status
-    if (statusFilter !== "all") {
-      result = result.filter((user) => user.status === statusFilter);
-    }
-
-    // Filter berdasarkan tanggal registrasi
-    if (dateFilter !== "all") {
-      const today = new Date();
-      const thirtyDaysAgo = new Date(today);
-      thirtyDaysAgo.setDate(today.getDate() - 30);
-      const ninetyDaysAgo = new Date(today);
-      ninetyDaysAgo.setDate(today.getDate() - 90);
-
-      if (dateFilter === "last30days") {
-        result = result.filter(
-          (user) => new Date(user.created_at) >= thirtyDaysAgo
-        );
-      } else if (dateFilter === "last90days") {
-        result = result.filter(
-          (user) => new Date(user.created_at) >= ninetyDaysAgo
-        );
+      if (!response.ok) {
+        throw new Error("Gagal mengambil detail pengguna");
       }
+
+      const data = await response.json();
+      if (data.success) {
+        setUserDetail(data.user);
+      } else {
+        throw new Error(data.error || "Gagal mengambil detail pengguna");
+      }
+    } catch (error: any) {
+      console.error("Error fetching user detail:", error);
+      setError(error.message);
+    } finally {
+      setLoadingDetail(false);
     }
+  };
 
-    // Filter berdasarkan pencarian
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (user) =>
-          user.full_name.toLowerCase().includes(query) ||
-          user.email.toLowerCase().includes(query)
-      );
+  const fetchUserStats = async () => {
+    try {
+      const response = await fetch("/api/admin/users/stats", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Gagal mengambil statistik pengguna");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setUserStats(data.stats);
+      }
+    } catch (error: any) {
+      console.error("Error fetching user stats:", error);
+      // Stats error tidak perlu ditampilkan ke user
     }
+  };
 
-    setFilteredUsers(result);
-  }, [users, roleFilter, statusFilter, dateFilter, searchQuery]);
+  const updateUser = async (userId: string, action: string, data?: any) => {
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, action, data }),
+      });
 
-  // Fungsi untuk menampilkan detail pengguna
+      const result = await response.json();
+      if (result.success) {
+        setSuccess(result.message);
+        fetchUsers(pagination.page); // Refresh current page
+        return true;
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      setError(error.message);
+      return false;
+    }
+  };
+
+  const resetPassword = async (userId: string, newPassword?: string) => {
+    try {
+      const response = await fetch("/api/admin/users/reset-password", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, newPassword }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSuccess(result.message);
+        return true;
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      setError(error.message);
+      return false;
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/admin/users?userId=${userId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSuccess(result.message);
+        fetchUsers(pagination.page);
+        return true;
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      setError(error.message);
+      return false;
+    }
+  };
+
+  // Event Handlers
+  const handleSearch = (searchTerm: string) => {
+    setFilters((prev) => ({ ...prev, search: searchTerm }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleFilterChange = (filterType: string, value: string) => {
+    setFilters((prev) => ({ ...prev, [filterType]: value }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handlePageChange = (page: number) => {
+    setPagination((prev) => ({ ...prev, page }));
+    fetchUsers(page);
+  };
+
   const handleViewDetails = (user: User) => {
     setSelectedUser(user);
-    fetchUserActivityLogs(user.id);
-    setIsDetailModalOpen(true);
+    setActiveModal("detail");
+    fetchUserDetail(user.id);
   };
 
-  // Fungsi untuk verifikasi guru
-  const handleVerifyTeacher = (user: User) => {
-    setSelectedUser(user);
-    setIsVerifyModalOpen(true);
-  };
-
-  // Fungsi untuk reset password
-  const handleResetPassword = (user: User) => {
-    setSelectedUser(user);
-    setIsResetPasswordModalOpen(true);
-  };
-
-  // Fungsi untuk suspend/aktivasi akun
-  const handleToggleStatus = (user: User) => {
-    setSelectedUser(user);
-    setConfirmAction(user.status === "active" ? "suspend" : "activate");
-    setIsConfirmModalOpen(true);
-  };
-
-  // Fungsi untuk melakukan verifikasi guru
-  const confirmVerifyTeacher = async () => {
-    if (!selectedUser) return;
-
-    try {
-      const { error } = await supabase
-        .from("users")
-        .update({ role: "teacher", status: "active" })
-        .eq("id", selectedUser.id);
-
-      if (error) {
-        throw error;
-      }
-
-      // Update state
-      setUsers(
-        users.map((user) =>
-          user.id === selectedUser.id
-            ? { ...user, role: "teacher", status: "active" }
-            : user
-        )
-      );
-
-      // Log aktivitas
-      await supabase.from("activity_logs").insert({
-        user_id: selectedUser.id,
-        activity_type: "verification",
-        description: "Akun diverifikasi sebagai guru",
-      });
-
-      setIsVerifyModalOpen(false);
-    } catch (error) {
-      console.error("Error verifying teacher:", error);
-      setError("Gagal memverifikasi guru");
+  const handleVerifyTeacher = async (user: User) => {
+    const success = await updateUser(user.id, "verify_teacher");
+    if (success) {
+      setActiveModal(null);
     }
   };
 
-  // Fungsi untuk melakukan reset password
-  const confirmResetPassword = async () => {
+  const handleResetPassword = async () => {
     if (!selectedUser) return;
 
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        selectedUser.email,
-        {
-          redirectTo: `${window.location.origin}/reset-password`,
-        }
-      );
+    const newPassword = resetPasswordForm.generateRandom
+      ? undefined
+      : resetPasswordForm.newPassword;
+    const success = await resetPassword(selectedUser.id, newPassword);
 
-      if (error) {
-        throw error;
-      }
-
-      // Log aktivitas
-      await supabase.from("activity_logs").insert({
-        user_id: selectedUser.id,
-        activity_type: "password_reset",
-        description: "Reset password diminta",
-      });
-
-      setIsResetPasswordModalOpen(false);
-    } catch (error) {
-      console.error("Error resetting password:", error);
-      setError("Gagal mereset password");
+    if (success) {
+      setActiveModal(null);
+      setResetPasswordForm({ newPassword: "", generateRandom: true });
     }
   };
 
-  // Fungsi untuk melakukan suspend/aktivasi akun
-  const confirmToggleStatus = async () => {
+  const handleDeleteUser = async () => {
     if (!selectedUser) return;
 
-    try {
-      const newStatus =
-        selectedUser.status === "active" ? "suspended" : "active";
-
-      const { error } = await supabase
-        .from("users")
-        .update({ status: newStatus })
-        .eq("id", selectedUser.id);
-
-      if (error) {
-        throw error;
-      }
-
-      // Update state
-      setUsers(
-        users.map((user) =>
-          user.id === selectedUser.id ? { ...user, status: newStatus } : user
-        )
-      );
-
-      // Log aktivitas
-      await supabase.from("activity_logs").insert({
-        user_id: selectedUser.id,
-        activity_type: "status_change",
-        description: `Akun ${
-          newStatus === "active" ? "diaktifkan" : "disuspend"
-        }`,
-      });
-
-      setIsConfirmModalOpen(false);
-    } catch (error) {
-      console.error("Error toggling status:", error);
-      setError("Gagal mengubah status akun");
+    const success = await deleteUser(selectedUser.id);
+    if (success) {
+      setActiveModal(null);
     }
   };
 
-  // Format tanggal
+  const closeModal = () => {
+    setActiveModal(null);
+    setSelectedUser(null);
+    setUserDetail(null);
+    setResetPasswordForm({ newPassword: "", generateRandom: true });
+  };
+
+  // Effects
+  useEffect(() => {
+    if (!currentUser || !token) return;
+
+    fetchUsers(1);
+    fetchUserStats();
+  }, [currentUser, token]);
+
+  useEffect(() => {
+    if (!currentUser || !token) return;
+
+    const timeoutId = setTimeout(() => {
+      fetchUsers(1);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [filters]);
+
+  // Auto-clear messages
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError("");
+        setSuccess("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
+  // Utility functions
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("id-ID", {
@@ -291,17 +410,169 @@ export default function User() {
     });
   };
 
+  const getRoleBadge = (role: string) => {
+    const badges = {
+      admin: "bg-purple-500/20 text-purple-400",
+      teacher: "bg-blue-500/20 text-blue-400",
+      student: "bg-green-500/20 text-green-400",
+    };
+
+    const labels = {
+      admin: "Admin",
+      teacher: "Guru",
+      student: "Siswa",
+    };
+
+    return {
+      class: badges[role as keyof typeof badges],
+      label: labels[role as keyof typeof labels],
+    };
+  };
+
+  const getStatusBadge = (status: string) => {
+    const badges = {
+      active: "bg-green-500/20 text-green-400",
+      suspended: "bg-red-500/20 text-red-400",
+      pending: "bg-yellow-500/20 text-yellow-400",
+    };
+
+    const labels = {
+      active: "Aktif",
+      suspended: "Suspended",
+      pending: "Pending",
+    };
+
+    return {
+      class: badges[status as keyof typeof badges],
+      label: labels[status as keyof typeof labels],
+    };
+  };
+
+  // Render pagination
+  const renderPagination = () => {
+    if (pagination.totalPages <= 1) return null;
+
+    const pages = [];
+    const maxPagesToShow = 5;
+    const startPage = Math.max(1, pagination.page - Math.floor(maxPagesToShow / 2));
+    const endPage = Math.min(pagination.totalPages, startPage + maxPagesToShow - 1);
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return (
+      <div className="flex justify-center items-center gap-2 mt-6">
+        <button
+          onClick={() => handlePageChange(pagination.page - 1)}
+          disabled={pagination.page === 1}
+          className="px-3 py-1 rounded bg-white/10 text-white/60 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          ‹
+        </button>
+
+        {pages.map((page) => (
+          <button
+            key={page}
+            onClick={() => handlePageChange(page)}
+            className={`px-3 py-1 rounded ${
+              pagination.page === page
+                ? "bg-blue-600 text-white"
+                : "bg-white/10 text-white/60 hover:bg-white/20"
+            }`}
+          >
+            {page}
+          </button>
+        ))}
+
+        <button
+          onClick={() => handlePageChange(pagination.page + 1)}
+          disabled={pagination.page === pagination.totalPages}
+          className="px-3 py-1 rounded bg-white/10 text-white/60 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          ›
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white/5 rounded-xl p-6">
       <h2 className="text-xl font-bold text-white mb-6">Manajemen Pengguna</h2>
+
+      {/* Messages */}
+      {error && (
+        <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded mb-6">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded mb-6">
+          {success}
+        </div>
+      )}
+
+      {/* Statistics Cards */}
+      {userStats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/60 text-sm">Total Pengguna</p>
+                <h3 className="text-2xl font-bold text-white">
+                  {userStats.total_users}
+                </h3>
+              </div>
+              <FiUser className="w-8 h-8 text-white/60" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-green-600 to-green-500 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/60 text-sm">Pengguna Baru (30 hari)</p>
+                <h3 className="text-2xl font-bold text-white">
+                  {userStats.recent_users}
+                </h3>
+              </div>
+              <FiCalendar className="w-8 h-8 text-white/60" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-purple-600 to-purple-500 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/60 text-sm">Aktif Minggu Ini</p>
+                <h3 className="text-2xl font-bold text-white">
+                  {userStats.active_users_this_week}
+                </h3>
+              </div>
+              <FiUser className="w-8 h-8 text-white/60" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-orange-600 to-orange-500 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/60 text-sm">Total Guru</p>
+                <h3 className="text-2xl font-bold text-white">
+                  {userStats.users_by_role.teacher}
+                </h3>
+              </div>
+              <FiUserCheck className="w-8 h-8 text-white/60" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter dan Pencarian */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div>
           <label className="block text-white/60 text-sm mb-1">Role</label>
           <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
+            value={filters.role}
+            onChange={(e) => handleFilterChange("role", e.target.value)}
             className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white"
           >
             <option value="all">Semua Role</option>
@@ -312,26 +583,12 @@ export default function User() {
         </div>
 
         <div>
-          <label className="block text-white/60 text-sm mb-1">Status</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white"
-          >
-            <option value="all">Semua Status</option>
-            <option value="active">Aktif</option>
-            <option value="suspended">Suspended</option>
-            <option value="pending">Pending</option>
-          </select>
-        </div>
-
-        <div>
           <label className="block text-white/60 text-sm mb-1">
             Tanggal Registrasi
           </label>
           <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
+            value={filters.dateFilter}
+            onChange={(e) => handleFilterChange("dateFilter", e.target.value)}
             className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white"
           >
             <option value="all">Semua Waktu</option>
@@ -340,241 +597,182 @@ export default function User() {
           </select>
         </div>
 
-        <div>
+        <div className="md:col-span-2">
           <label className="block text-white/60 text-sm mb-1">Cari</label>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nama atau email..."
-            className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white"
-          />
+          <div className="relative">
+            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/40" />
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder="Cari nama atau email..."
+              className="w-full bg-white/10 border border-white/20 rounded-lg pl-10 pr-4 py-2 text-white placeholder-white/40"
+            />
+          </div>
         </div>
       </div>
 
       {/* Tabel Pengguna */}
       {loading ? (
         <div className="flex justify-center items-center py-12">
-          <p className="text-white/60 text-lg">Memuat data pengguna...</p>
+          <div className="w-8 h-8 border-4 border-kelasin-purple border-t-transparent rounded-full animate-spin"></div>
         </div>
-      ) : error ? (
-        <div className="bg-red-500/10 border border-red-500 text-red-500 rounded-lg p-4 mb-6">
-          {error}
-        </div>
-      ) : filteredUsers.length === 0 ? (
+      ) : users.length === 0 ? (
         <div className="flex justify-center items-center py-12">
           <p className="text-white/60 text-lg">
-            Tidak ada pengguna yang ditemukan
+            {filters.search || filters.role !== "all" || filters.dateFilter !== "all"
+              ? "Tidak ada pengguna yang sesuai dengan filter"
+              : "Belum ada pengguna yang terdaftar"}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-white/10 text-white/80">
-                <th className="px-4 py-3 text-left">Pengguna</th>
-                <th className="px-4 py-3 text-left">Email</th>
-                <th className="px-4 py-3 text-center">Role</th>
-                <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-center">Tanggal Registrasi</th>
-                <th className="px-4 py-3 text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((user) => (
-                <tr
-                  key={user.id}
-                  className="border-b border-white/5 hover:bg-white/5"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-10 h-10 rounded-full overflow-hidden">
-                        <Image
-                          src={user.avatar_url || "/images/profile.png"}
-                          alt={user.full_name}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                      <span className="text-white">{user.full_name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-white/60">{user.email}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs ${
-                        user.role === "admin"
-                          ? "bg-purple-500/20 text-purple-400"
-                          : user.role === "teacher"
-                          ? "bg-blue-500/20 text-blue-400"
-                          : "bg-green-500/20 text-green-400"
-                      }`}
-                    >
-                      {user.role === "admin"
-                        ? "Admin"
-                        : user.role === "teacher"
-                        ? "Guru"
-                        : "Siswa"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs ${
-                        user.status === "active"
-                          ? "bg-green-500/20 text-green-400"
-                          : user.status === "suspended"
-                          ? "bg-red-500/20 text-red-400"
-                          : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {user.status === "active"
-                        ? "Aktif"
-                        : user.status === "suspended"
-                        ? "Suspended"
-                        : "Pending"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center text-white/60">
-                    {formatDate(user.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex justify-center gap-2">
-                      <button
-                        onClick={() => handleViewDetails(user)}
-                        className="bg-white/10 hover:bg-white/20 text-white p-1 rounded"
-                        title="Lihat Detail"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
-                      </button>
-
-                      {user.role === "student" && user.status === "pending" && (
-                        <button
-                          onClick={() => handleVerifyTeacher(user)}
-                          className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 p-1 rounded"
-                          title="Verifikasi sebagai Guru"
-                        >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => handleResetPassword(user)}
-                        className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 p-1 rounded"
-                        title="Reset Password"
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                          />
-                        </svg>
-                      </button>
-
-                      <button
-                        onClick={() => handleToggleStatus(user)}
-                        className={`${
-                          user.status === "active"
-                            ? "bg-red-500/20 hover:bg-red-500/30 text-red-400"
-                            : "bg-green-500/20 hover:bg-green-500/30 text-green-400"
-                        } p-1 rounded`}
-                        title={
-                          user.status === "active"
-                            ? "Suspend Akun"
-                            : "Aktifkan Akun"
-                        }
-                      >
-                        {user.status === "active" ? (
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                  </td>
+        <div className="bg-white/5 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-white/10 text-white/80">
+                  <th className="px-6 py-4 text-left">Pengguna</th>
+                  <th className="px-6 py-4 text-left">Email</th>
+                  <th className="px-6 py-4 text-center">Role</th>
+                  <th className="px-6 py-4 text-center">Status</th>
+                  <th className="px-6 py-4 text-center">Aktivitas</th>
+                  <th className="px-6 py-4 text-center">Tanggal Bergabung</th>
+                  <th className="px-6 py-4 text-center">Aksi</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((user) => {
+                  const roleBadge = getRoleBadge(user.role);
+                  const statusBadge = getStatusBadge(user.status);
+
+                  return (
+                    <tr
+                      key={user.id}
+                      className="border-b border-white/5 hover:bg-white/5 transition"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                            <Image
+                              src={user.avatar_url || "/images/profile.png"}
+                              alt={user.full_name}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <div>
+                            <div className="text-white font-medium">
+                              {user.full_name}
+                            </div>
+                            {user.grade && (
+                              <div className="text-white/60 text-sm">
+                                Kelas {user.grade}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="text-white/80">{user.email}</div>
+                        <div className="text-white/60 text-sm">
+                          ID: {user.id.slice(0, 8)}...
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-1 rounded-full text-xs ${roleBadge.class}`}
+                        >
+                          {roleBadge.label}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-1 rounded-full text-xs ${statusBadge.class}`}
+                        >
+                          {statusBadge.label}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        <div className="text-white/80 text-sm">
+                          <div>{user.stats.total_videos} video</div>
+                          <div>{user.stats.total_purchases} pembelian</div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-center text-white/60 text-sm">
+                        {formatDate(user.created_at)}
+                      </td>
+
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex justify-center gap-1">
+                          <button
+                            onClick={() => handleViewDetails(user)}
+                            className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 p-2 rounded transition"
+                            title="Lihat Detail"
+                          >
+                            <FiEye size={16} />
+                          </button>
+
+                          {user.role === "student" && user.status === "pending" && (
+                            <button
+                              onClick={() => handleVerifyTeacher(user)}
+                              className="bg-green-500/20 hover:bg-green-500/30 text-green-400 p-2 rounded transition"
+                              title="Verifikasi sebagai Guru"
+                            >
+                              <FiUserCheck size={16} />
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setActiveModal("reset-password");
+                            }}
+                            className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 p-2 rounded transition"
+                            title="Reset Password"
+                          >
+                            <FiKey size={16} />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setConfirmAction("delete");
+                              setActiveModal("confirm");
+                            }}
+                            className="bg-red-500/20 hover:bg-red-500/30 text-red-400 p-2 rounded transition"
+                            title="Hapus Pengguna"
+                          >
+                            <FiTrash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
+      {/* Pagination */}
+      {renderPagination()}
+
       {/* Modal Detail Pengguna */}
-      {isDetailModalOpen && selectedUser && (
+      {activeModal === "detail" && selectedUser && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="relative max-w-3xl w-full bg-[#000044] rounded-xl p-8 max-h-[90vh] overflow-y-auto">
+          <div className="relative max-w-4xl w-full bg-[#000044] rounded-xl p-8 max-h-[90vh] overflow-y-auto">
             <button
-              onClick={() => setIsDetailModalOpen(false)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white"
+              onClick={closeModal}
+              className="absolute top-4 right-4 text-white/80 hover:text-white transition"
               aria-label="Close"
             >
               <svg
-                xmlns="http://www.w3.org/2000/svg"
                 className="h-6 w-6"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -593,304 +791,398 @@ export default function User() {
               Detail Pengguna
             </h3>
 
-            <div className="flex flex-col md:flex-row gap-6 mb-6">
-              <div className="md:w-1/3 flex flex-col items-center">
-                <div className="relative w-32 h-32 rounded-full overflow-hidden mb-4">
-                  <Image
-                    src={selectedUser.avatar_url || "/images/profile.png"}
-                    alt={selectedUser.full_name}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <h4 className="text-xl font-semibold text-white">
-                  {selectedUser.full_name}
-                </h4>
-                <p className="text-white/60">{selectedUser.email}</p>
-
-                <div className="flex gap-2 mt-4">
-                  <span
-                    className={`inline-block px-2 py-1 rounded-full text-xs ${
-                      selectedUser.role === "admin"
-                        ? "bg-purple-500/20 text-purple-400"
-                        : selectedUser.role === "teacher"
-                        ? "bg-blue-500/20 text-blue-400"
-                        : "bg-green-500/20 text-green-400"
-                    }`}
-                  >
-                    {selectedUser.role === "admin"
-                      ? "Admin"
-                      : selectedUser.role === "teacher"
-                      ? "Guru"
-                      : "Siswa"}
-                  </span>
-
-                  <span
-                    className={`inline-block px-2 py-1 rounded-full text-xs ${
-                      selectedUser.status === "active"
-                        ? "bg-green-500/20 text-green-400"
-                        : selectedUser.status === "suspended"
-                        ? "bg-red-500/20 text-red-400"
-                        : "bg-yellow-500/20 text-yellow-400"
-                    }`}
-                  >
-                    {selectedUser.status === "active"
-                      ? "Aktif"
-                      : selectedUser.status === "suspended"
-                      ? "Suspended"
-                      : "Pending"}
-                  </span>
-                </div>
+            {loadingDetail ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-4 border-kelasin-purple border-t-transparent rounded-full animate-spin"></div>
               </div>
-
-              <div className="md:w-2/3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <p className="text-white/60 text-sm">Tanggal Registrasi</p>
-                    <p className="text-white">
-                      {formatDate(selectedUser.created_at)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-white/60 text-sm">Login Terakhir</p>
-                    <p className="text-white">
-                      {selectedUser.last_login
-                        ? formatDate(selectedUser.last_login)
-                        : "Belum pernah login"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h5 className="text-lg font-semibold text-white mb-2">
-                    Log Aktivitas
-                  </h5>
-
-                  {activityLogs.length === 0 ? (
-                    <p className="text-white/60">Belum ada aktivitas</p>
-                  ) : (
-                    <div className="bg-white/5 rounded-lg overflow-hidden">
-                      {activityLogs.map((log) => (
-                        <div
-                          key={log.id}
-                          className="border-b border-white/10 p-3 last:border-b-0"
-                        >
-                          <div className="flex justify-between">
-                            <p className="text-white">{log.description}</p>
-                            <p className="text-white/60 text-sm">
-                              {formatDate(log.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+            ) : userDetail ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Profile Section */}
+                <div className="lg:col-span-1">
+                  <div className="bg-white/5 rounded-xl p-6 text-center">
+                    <div className="relative w-24 h-24 rounded-full overflow-hidden mx-auto mb-4">
+                      <Image
+                        src={userDetail.avatar_url || "/images/profile.png"}
+                        alt={userDetail.full_name}
+                        fill
+                        className="object-cover"
+                      />
                     </div>
-                  )}
+
+                    <h4 className="text-xl font-semibold text-white mb-2">
+                      {userDetail.full_name}
+                    </h4>
+                    <p className="text-white/60 mb-4">{userDetail.email}</p>
+
+                    <div className="flex justify-center gap-2 mb-4">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${getRoleBadge(
+                          userDetail.role
+                        ).class}`}
+                      >
+                        {getRoleBadge(userDetail.role).label}
+                      </span>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(
+                          userDetail.status
+                        ).class}`}
+                      >
+                        {getStatusBadge(userDetail.status).label}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-white/60">Bergabung:</span>
+                        <span className="text-white">
+                          {formatDate(userDetail.created_at)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/60">Login Terakhir:</span>
+                        <span className="text-white">
+                          {formatDate(userDetail.last_login)}
+                        </span>
+                      </div>
+                      {userDetail.grade && (
+                        <div className="flex justify-between">
+                          <span className="text-white/60">Kelas:</span>
+                          <span className="text-white">{userDetail.grade}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-white/60">Saldo Token:</span>
+                        <span className="text-white">{userDetail.token_balance}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex gap-2">
-                  {selectedUser.role === "student" &&
-                    selectedUser.status === "pending" && (
-                      <button
-                        onClick={() => {
-                          setIsDetailModalOpen(false);
-                          handleVerifyTeacher(selectedUser);
-                        }}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"
-                      >
-                        Verifikasi sebagai Guru
-                      </button>
+                {/* Statistics & Activity */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Statistics */}
+                  <div className="bg-white/5 rounded-xl p-6">
+                    <h5 className="text-lg font-semibold text-white mb-4">
+                      Statistik
+                    </h5>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-400">
+                          {userDetail.stats.total_videos}
+                        </div>
+                        <div className="text-white/60 text-sm">Video</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-400">
+                          {userDetail.stats.total_purchases}
+                        </div>
+                        <div className="text-white/60 text-sm">Pembelian</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-400">
+                          {userDetail.stats.total_likes}
+                        </div>
+                        <div className="text-white/60 text-sm">Like</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-yellow-400">
+                          {userDetail.stats.total_wishlists}
+                        </div>
+                        <div className="text-white/60 text-sm">Wishlist</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-400">
+                          {userDetail.stats.total_ratings}
+                        </div>
+                        <div className="text-white/60 text-sm">Rating</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Videos (for teachers) */}
+                  {userDetail.role === "teacher" &&
+                    userDetail.recent_videos.length > 0 && (
+                      <div className="bg-white/5 rounded-xl p-6">
+                        <h5 className="text-lg font-semibold text-white mb-4">
+                          Video Terbaru
+                        </h5>
+                        <div className="space-y-3">
+                          {userDetail.recent_videos.map((video) => (
+                            <div
+                              key={video.id}
+                              className="flex justify-between items-center py-2 border-b border-white/10 last:border-b-0"
+                            >
+                              <div>
+                                <div className="text-white font-medium">
+                                  {video.title}
+                                </div>
+                                <div className="text-white/60 text-sm">
+                                  {formatDate(video.created_at)}
+                                </div>
+                              </div>
+                              <div className="text-right text-sm">
+                                <div className="text-white">{video.views} views</div>
+                                <div className="text-yellow-400">
+                                  ★ {video.rating.toFixed(1)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
-                  <button
-                    onClick={() => {
-                      setIsDetailModalOpen(false);
-                      handleResetPassword(selectedUser);
-                    }}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm"
-                  >
-                    Reset Password
-                  </button>
+                  {/* Recent Purchases (for students) */}
+                  {userDetail.role === "student" &&
+                    userDetail.recent_purchases.length > 0 && (
+                      <div className="bg-white/5 rounded-xl p-6">
+                        <h5 className="text-lg font-semibold text-white mb-4">
+                          Pembelian Terbaru
+                        </h5>
+                        <div className="space-y-3">
+                          {userDetail.recent_purchases.map((purchase) => (
+                            <div
+                              key={purchase.id}
+                              className="flex justify-between items-center py-2 border-b border-white/10 last:border-b-0"
+                            >
+                              <div>
+                                <div className="text-white font-medium">
+                                  {purchase.video_title}
+                                </div>
+                                <div className="text-white/60 text-sm">
+                                  {formatDate(purchase.purchase_date)}
+                                </div>
+                              </div>
+                              <div className="text-right text-sm">
+                                <div className="text-white">
+                                  Rp{" "}
+                                  {purchase.price_paid.toLocaleString()}
+                                </div>
+                                <div
+                                  className={`${
+                                    purchase.payment_status === "completed"
+                                      ? "text-green-400"
+                                      : "text-yellow-400"
+                                  }`}
+                                >
+                                  {purchase.payment_status}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                  <button
-                    onClick={() => {
-                      setIsDetailModalOpen(false);
-                      handleToggleStatus(selectedUser);
-                    }}
-                    className={`${
-                      selectedUser.status === "active"
-                        ? "bg-red-500 hover:bg-red-600"
-                        : "bg-green-500 hover:bg-green-600"
-                    } text-white px-4 py-2 rounded-lg text-sm`}
-                  >
-                    {selectedUser.status === "active"
-                      ? "Suspend Akun"
-                      : "Aktifkan Akun"}
-                  </button>
+                  {/* Activity Logs */}
+                  <div className="bg-white/5 rounded-xl p-6">
+                    <h5 className="text-lg font-semibold text-white mb-4">
+                      Log Aktivitas
+                    </h5>
+                    {userDetail.activity_logs.length === 0 ? (
+                      <p className="text-white/60">Belum ada aktivitas</p>
+                    ) : (
+                      <div className="space-y-3 max-h-60 overflow-y-auto">
+                        {userDetail.activity_logs.map((log) => (
+                          <div
+                            key={log.id}
+                            className="flex justify-between items-center py-2 border-b border-white/10 last:border-b-0"
+                          >
+                            <div>
+                              <div className="text-white">{log.description}</div>
+                              <div className="text-white/60 text-sm capitalize">
+                                {log.activity_type}
+                              </div>
+                            </div>
+                            <div className="text-white/60 text-sm">
+                              {formatDate(log.created_at)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-3">
+                    {userDetail.role === "student" &&
+                      userDetail.status === "pending" && (
+                        <button
+                          onClick={() => handleVerifyTeacher(userDetail)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition"
+                        >
+                          <FiUserCheck className="inline mr-2" />
+                          Verifikasi sebagai Guru
+                        </button>
+                      )}
+
+                    <button
+                      onClick={() => {
+                        setActiveModal("reset-password");
+                      }}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm transition"
+                    >
+                      <FiKey className="inline mr-2" />
+                      Reset Password
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setConfirmAction("delete");
+                        setActiveModal("confirm");
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm transition"
+                    >
+                      <FiTrash2 className="inline mr-2" />
+                      Hapus Pengguna
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Verifikasi Guru */}
-      {isVerifyModalOpen && selectedUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="relative max-w-md w-full bg-[#000044] rounded-xl p-8">
-            <button
-              onClick={() => setIsVerifyModalOpen(false)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white"
-              aria-label="Close"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-
-            <h3 className="text-xl font-bold text-white mb-4">
-              Verifikasi Guru
-            </h3>
-
-            <p className="text-white/80 mb-6">
-              Apakah Anda yakin ingin memverifikasi{" "}
-              <span className="font-semibold">{selectedUser.full_name}</span>{" "}
-              sebagai guru? Akun akan diaktifkan dan mendapatkan akses ke fitur
-              guru.
-            </p>
-
-            <div className="flex gap-4">
-              <button
-                onClick={() => setIsVerifyModalOpen(false)}
-                className="w-full bg-white/10 text-white rounded-lg px-4 py-2 font-medium hover:bg-white/20 transition-opacity"
-              >
-                Batal
-              </button>
-              <button
-                onClick={confirmVerifyTeacher}
-                className="w-full bg-blue-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-blue-600 transition-opacity"
-              >
-                Verifikasi
-              </button>
-            </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-white/60">Gagal memuat detail pengguna</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Modal Reset Password */}
-      {isResetPasswordModalOpen && selectedUser && (
+      {activeModal === "reset-password" && selectedUser && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="relative max-w-md w-full bg-[#000044] rounded-xl p-8">
             <button
-              onClick={() => setIsResetPasswordModalOpen(false)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white"
+              onClick={closeModal}
+              className="absolute top-4 right-4 text-white/80 hover:text-white transition"
               aria-label="Close"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
 
-            <h3 className="text-xl font-bold text-white mb-4">
-              Reset Password
-            </h3>
-
+            <h3 className="text-xl font-bold text-white mb-4">Reset Password</h3>
             <p className="text-white/80 mb-6">
-              Apakah Anda yakin ingin mengirim email reset password ke{" "}
-              <span className="font-semibold">{selectedUser.email}</span>?
+              Reset password untuk{" "}
+              <span className="font-semibold">{selectedUser.full_name}</span>
             </p>
 
-            <div className="flex gap-4">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="generate"
+                  name="resetType"
+                  checked={resetPasswordForm.generateRandom}
+                  onChange={() =>
+                    setResetPasswordForm((prev) => ({
+                      ...prev,
+                      generateRandom: true,
+                    }))
+                  }
+                  className="text-blue-500"
+                />
+                <label htmlFor="generate" className="text-white">
+                  Generate password acak
+                </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="custom"
+                  name="resetType"
+                  checked={!resetPasswordForm.generateRandom}
+                  onChange={() =>
+                    setResetPasswordForm((prev) => ({
+                      ...prev,
+                      generateRandom: false,
+                    }))
+                  }
+                  className="text-blue-500"
+                />
+                <label htmlFor="custom" className="text-white">
+                  Set password khusus
+                </label>
+              </div>
+
+              {!resetPasswordForm.generateRandom && (
+                <input
+                  type="password"
+                  value={resetPasswordForm.newPassword}
+                  onChange={(e) =>
+                    setResetPasswordForm((prev) => ({
+                      ...prev,
+                      newPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="Password baru (minimal 6 karakter)"
+                  className="w-full bg-white/10 border border-white/20 rounded px-3 py-2 text-white placeholder-white/40"
+                  minLength={6}
+                  required
+                />
+              )}
+            </div>
+
+            <div className="flex gap-4 mt-6">
               <button
-                onClick={() => setIsResetPasswordModalOpen(false)}
-                className="w-full bg-white/10 text-white rounded-lg px-4 py-2 font-medium hover:bg-white/20 transition-opacity"
+                onClick={closeModal}
+                className="w-full bg-white/10 text-white rounded-lg px-4 py-2 font-medium hover:bg-white/20 transition"
               >
                 Batal
               </button>
               <button
-                onClick={confirmResetPassword}
-                className="w-full bg-yellow-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-yellow-600 transition-opacity"
+                onClick={handleResetPassword}
+                className="w-full bg-yellow-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-yellow-600 transition"
+                disabled={
+                  !resetPasswordForm.generateRandom &&
+                  resetPasswordForm.newPassword.length < 6
+                }
               >
-                Kirim Email Reset
+                Reset Password
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Konfirmasi Suspend/Aktivasi */}
-      {isConfirmModalOpen && selectedUser && (
+      {/* Modal Konfirmasi */}
+      {activeModal === "confirm" && selectedUser && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="relative max-w-md w-full bg-[#000044] rounded-xl p-8">
             <button
-              onClick={() => setIsConfirmModalOpen(false)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white"
+              onClick={closeModal}
+              className="absolute top-4 right-4 text-white/80 hover:text-white transition"
               aria-label="Close"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
 
             <h3 className="text-xl font-bold text-white mb-4">
-              {confirmAction === "suspend" ? "Suspend Akun" : "Aktivasi Akun"}
+              Konfirmasi Hapus Pengguna
             </h3>
 
             <p className="text-white/80 mb-6">
-              {confirmAction === "suspend"
-                ? `Apakah Anda yakin ingin menangguhkan akun ${selectedUser.full_name}? Pengguna tidak akan dapat mengakses akun mereka sampai diaktifkan kembali.`
-                : `Apakah Anda yakin ingin mengaktifkan kembali akun ${selectedUser.full_name}?`}
+              Apakah Anda yakin ingin menghapus pengguna{" "}
+              <span className="font-semibold">{selectedUser.full_name}</span>?<br /><br />
+              <span className="text-red-400">Tindakan ini tidak dapat dibatalkan.</span>
             </p>
 
             <div className="flex gap-4">
               <button
-                onClick={() => setIsConfirmModalOpen(false)}
-                className="w-full bg-white/10 text-white rounded-lg px-4 py-2 font-medium hover:bg-white/20 transition-opacity"
+                onClick={closeModal}
+                className="w-full bg-white/10 text-white rounded-lg px-4 py-2 font-medium hover:bg-white/20 transition"
               >
                 Batal
               </button>
               <button
-                onClick={confirmToggleStatus}
-                className={`w-full ${
-                  confirmAction === "suspend"
-                    ? "bg-red-500 hover:bg-red-600"
-                    : "bg-green-500 hover:bg-green-600"
-                } text-white rounded-lg px-4 py-2 font-medium transition-opacity`}
+                onClick={handleDeleteUser}
+                className="w-full bg-red-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-red-600 transition"
               >
-                {confirmAction === "suspend" ? "Suspend" : "Aktifkan"}
+                Hapus Pengguna
               </button>
             </div>
           </div>

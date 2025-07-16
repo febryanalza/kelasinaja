@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-// import { useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Image from "next/image";
 import Header from "@/app/components/layouts/Navbar";
 import Wishlist from "@/app/components/Dashboard/Student/Wishlist";
@@ -10,12 +10,28 @@ import Bought from "@/app/components/Dashboard/Student/Bought";
 import Subscription from "@/app/components/Dashboard/Student/Subscription";
 import DecorativeBadge from "@/app/components/elements/DecorativeBadge";
 import DecorativeBackground from "@/app/components/elements/DecorativeBackround";
-import supabase from "@/lib/supabase";
+import { useAuth } from "@/context/auth-context";
 import type { UserMenuDashboard } from "@/app/types/interface";
 
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url?: string;
+  grade?: string;
+  role: string;
+  badge?: number;
+  token_balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function StudentDashboard() {
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const params = useParams();
+  const { user, token } = useAuth();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("wishlist");
 
   const tabs: UserMenuDashboard[] = [
@@ -26,28 +42,54 @@ export default function StudentDashboard() {
   ];
 
   useEffect(() => {
-    setLoading(false);
-    const fetchUserProfile = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-
-        if (profile) {
-          setUserProfile(profile);
-        }
+    async function fetchUserProfile() {
+      if (!user || !token || !params.id) {
+        setError('Tidak dapat mengakses halaman ini');
+        setLoading(false);
+        return;
       }
-      
-    };
+
+      // Cek apakah user mencoba mengakses dashboard orang lain
+      if (user.id !== params.id) {
+        setError('Anda tidak memiliki akses ke dashboard ini');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch(`/api/user/${params.id}/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Gagal mengambil data profile');
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+          setUserProfile(data.user);
+        } else {
+          throw new Error(data.error || 'Gagal memuat profile');
+        }
+        
+      } catch (error: any) {
+        console.error('Error fetching user profile:', error);
+        setError(error.message || 'Terjadi kesalahan saat mengambil data profile');
+      } finally {
+        setLoading(false);
+      }
+    }
 
     fetchUserProfile();
-  }, []);
+  }, [user, token, params.id]);
 
   const renderTabContent = () => {
     const activeTabObj = tabs.find(tab => tab.id === activeTab);
@@ -62,6 +104,25 @@ export default function StudentDashboard() {
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-kelasin-purple border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-kelasin-purple text-xl font-medium">Memuat...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-white">
+        <Header />
+        <div className="flex justify-center items-center h-[80vh]">
+          <div className="text-center">
+            <div className="text-red-500 text-xl font-medium mb-4">{error}</div>
+            <button 
+              onClick={() => window.location.href = '/'}
+              className="bg-kelasin-purple text-white px-6 py-3 rounded-lg hover:bg-kelasin-purple/90 transition-colors"
+            >
+              Kembali ke Beranda
+            </button>
           </div>
         </div>
       </main>
@@ -97,19 +158,20 @@ export default function StudentDashboard() {
                   <p className="text-lg text-gray-700 animate-fade-in-delayed">
                     {userProfile?.grade ? `Kelas ${userProfile.grade}` : "Belajar dengan semangat di KelasinAja"}
                   </p>
+                  <p className="text-md text-gray-600 mt-2">
+                    Token: <span className="font-bold text-kelasin-purple">{userProfile?.token_balance || 0}</span>
+                  </p>
                 </div>
               </div>
             </div>
             
             {/* Decorative Elements */}
             <DecorativeBadge />
-            
           </div>
         </div>
 
         {/* Background decorative elements */}
         <DecorativeBackground />
-        
       </section>
 
       {/* Dashboard Tabs - Styled like landing page sections */}

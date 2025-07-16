@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-// import { useParams } from "next/navigation";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import Header from "@/app/components/layouts/Navbar";
-import supabase  from "@/lib/supabase";
+import { useAuth } from "@/context/auth-context";
 import Beranda from "@/app/components/Dashboard/Admin/Beranda";
 import ContentWeb from "@/app/components/Dashboard/Admin/ContentWeb";
 import Marketing from "@/app/components/Dashboard/Admin/Marketing";
@@ -18,10 +18,25 @@ import DecorativeBadge from "@/app/components/elements/DecorativeBadge";
 import DecorativeBackground from "@/app/components/elements/DecorativeBackround";
 import type { UserMenuDashboard } from "@/app/types/interface";
 
+interface AdminProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url?: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+  token_balance?: number;
+}
+
 export default function AdminDashboard() {
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const { user, token, isLoading } = useAuth();
+  const router = useRouter();
+  const [userProfile, setUserProfile] = useState<AdminProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("beranda");
+
   const adminMenus: UserMenuDashboard[] = [
     { id: "beranda", title: "Beranda", component: Beranda },
     { id: "users", title: "Users", component: User },
@@ -35,32 +50,103 @@ export default function AdminDashboard() {
   ];
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    // Wait for auth context to load
+    if (isLoading) return;
 
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
+    // Check if user is logged in
+    if (!user || !token) {
+      console.log('No user or token found, redirecting to home');
+      router.push('/');
+      return;
+    }
 
-        if (profile) {
-          setUserProfile(profile);
-        }
-      }
+    // Check if user is admin
+    if (user.role !== 'admin') {
+      console.log('User is not admin, role:', user.role);
+      router.push('/');
+      return;
+    }
+
+    console.log('User is admin, fetching profile for user:', user.id);
+    fetchAdminProfile();
+  }, [user, token, isLoading, router]);
+
+  const fetchAdminProfile = async () => {
+    if (!user || !token) {
+      setError('Tidak dapat mengakses halaman ini');
       setLoading(false);
-    };
+      return;
+    }
 
-    fetchUserProfile();
-  }, []);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Fetching profile for user ID:', user.id);
+      console.log('Using token:', token ? 'Token exists' : 'No token');
+      
+      const response = await fetch(`/api/user/${user.id}/profile`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('Profile fetch response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Invalid response format' }));
+        console.error('Profile fetch error:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Profile fetch success:', data);
+      
+      if (data.success) {
+        setUserProfile(data.user);
+      } else {
+        throw new Error(data.error || 'Gagal memuat profile');
+      }
+      
+    } catch (error: any) {
+      console.error('Error fetching admin profile:', error);
+      setError(error.message || 'Terjadi kesalahan saat mengambil data profile');
+      
+      // If it's an auth error, redirect to login
+      if (error.message?.includes('Token') || error.message?.includes('authorization')) {
+        console.log('Auth error detected, redirecting to home');
+        router.push('/');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderTabContent = () => {
     const activeTabObj = adminMenus.find(tab => tab.id === activeTab);
     return activeTabObj ? <activeTabObj.component /> : <div>Tab tidak ditemukan</div>;
   };
+
+  // Show loading while auth context is loading
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-white">
+        <Header />
+        <div className="flex justify-center items-center h-[80vh]">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-kelasin-purple border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-kelasin-purple text-xl font-medium">Memuat autentikasi...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Don't render anything if user is not admin (will redirect)
+  if (!user || user.role !== 'admin') {
+    return null;
+  }
 
   if (loading) {
     return (
@@ -69,7 +155,47 @@ export default function AdminDashboard() {
         <div className="flex justify-center items-center h-[80vh]">
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-kelasin-purple border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-kelasin-purple text-xl font-medium">Memuat...</p>
+            <p className="text-kelasin-purple text-xl font-medium">Memuat dashboard...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-white">
+        <Header />
+        <div className="flex justify-center items-center h-[80vh]">
+          <div className="text-center max-w-md mx-auto p-6">
+            <div className="text-red-500 text-xl font-medium mb-4">{error}</div>
+            <div className="text-gray-600 text-sm mb-6">
+              {process.env.NODE_ENV === 'development' && (
+                <div className="bg-gray-100 p-4 rounded text-left">
+                  <p><strong>Debug Info:</strong></p>
+                  <p>User ID: {user?.id}</p>
+                  <p>User Role: {user?.role}</p>
+                  <p>Token exists: {token ? 'Yes' : 'No'}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-4 justify-center">
+              <button 
+                onClick={() => {
+                  setError(null);
+                  fetchAdminProfile();
+                }}
+                className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Coba Lagi
+              </button>
+              <button 
+                onClick={() => router.push('/')}
+                className="bg-kelasin-purple text-white px-6 py-3 rounded-lg hover:bg-kelasin-purple/90 transition-colors"
+              >
+                Kembali ke Beranda
+              </button>
+            </div>
           </div>
         </div>
       </main>
@@ -89,7 +215,7 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-6 mb-6">
                 <div className="relative w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden border-4 border-kelasin-yellow shadow-lg">
                   <Image
-                    src={userProfile?.avatar_url || "/images/profile.png"}
+                    src={userProfile?.avatar_url || user?.avatar_url || "/images/profile.png"}
                     alt="Profile Avatar"
                     fill
                     className="object-cover"
@@ -103,7 +229,9 @@ export default function AdminDashboard() {
                     </span>
                   </h1>
                   <p className="text-lg text-gray-700 animate-fade-in-delayed">
-                    {userProfile?.grade ? `Kelas ${userProfile.grade}` : "Kelola platform KelasinAja dengan mudah"}
+                    {userProfile?.full_name || user?.full_name 
+                      ? `Selamat datang, ${userProfile?.full_name || user?.full_name}` 
+                      : "Kelola platform KelasinAja dengan mudah"}
                   </p>
                 </div>
               </div>
@@ -111,13 +239,11 @@ export default function AdminDashboard() {
             
             {/* Decorative Elements */}
             <DecorativeBadge />
-            
           </div>
         </div>
 
         {/* Background decorative elements */}
         <DecorativeBackground />
-        
       </section>
 
       {/* Dashboard Tabs - Styled like landing page sections */}
