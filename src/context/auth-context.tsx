@@ -15,7 +15,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (userData: User, userToken: string) => Promise<boolean>; // Changed parameters
   register: (userData: any) => Promise<boolean>;
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
@@ -60,36 +60,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadAuthData();
   }, [mounted]);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (userData: User, userToken: string): Promise<boolean> => {
     try {
       setIsLoading(true);
       
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        const { user: userData, token: userToken } = data;
-        
-        setUser(userData);
-        setToken(userToken);
-        
-        // Only access localStorage after component is mounted
-        if (mounted) {
-          localStorage.setItem('auth_token', userToken);
-          localStorage.setItem('auth_user', JSON.stringify(userData));
-        }
-        
-        return true;
-      } else {
-        throw new Error(data.error || 'Login failed');
+      // Directly use the provided user data and token
+      setUser(userData);
+      setToken(userToken);
+      
+      // Only access localStorage after component is mounted
+      if (mounted) {
+        localStorage.setItem('auth_token', userToken);
+        localStorage.setItem('auth_user', JSON.stringify(userData));
       }
+      
+      return true;
     } catch (error) {
       console.error('Login error:', error);
       return false;
